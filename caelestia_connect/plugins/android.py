@@ -29,6 +29,58 @@ class AndroidPlugin(Plugin):
         {"key": "audio", "type": "bool", "label": _("Forward audio while mirroring"), "default": True},
         {"key": "turn_screen_off", "type": "bool", "label": _("Turn phone screen off while mirroring"), "default": False},
         {
+            "key": "max_size",
+            "type": "choice",
+            "label": _("Mirror resolution"),
+            "default": 0,
+            "choices": [
+                [0, _("Native resolution")],
+                [1080, "1080p (max 1080)"],
+                [1440, "1440p (max 1440)"],
+                [1920, "1080p landscape (max 1920)"],
+                [2560, "2K (max 2560)"],
+            ],
+        },
+        {
+            "key": "video_bit_rate",
+            "type": "choice",
+            "label": _("Video bit rate"),
+            "default": "8M",
+            "choices": [
+                ["4M", "4 Mbps (Low latency)"],
+                ["8M", "8 Mbps (Default)"],
+                ["12M", "12 Mbps (High quality)"],
+                ["16M", "16 Mbps (Very high quality)"],
+                ["24M", "24 Mbps (Ultra quality)"],
+            ],
+        },
+        {
+            "key": "max_fps",
+            "type": "choice",
+            "label": _("Max frame rate"),
+            "default": 0,
+            "choices": [
+                [0, _("Device default")],
+                [30, "30 fps"],
+                [55, "55 fps (Custom)"],
+                [60, "60 fps"],
+                [90, "90 fps"],
+                [120, "120 fps"],
+            ],
+        },
+        {
+            "key": "new_display",
+            "type": "str",
+            "label": _("Virtual display (e.g. 1920x1080)"),
+            "default": "",
+        },
+        {
+            "key": "custom_args",
+            "type": "str",
+            "label": _("Custom scrcpy arguments"),
+            "default": "",
+        },
+        {
             "key": "facing",
             "type": "choice",
             "label": _("Camera"),
@@ -147,6 +199,28 @@ class AndroidPlugin(Plugin):
             self._screen_on = False
         else:
             self._screen_on = True
+
+        max_size = self.setting("max_size")
+        if max_size:
+            cmd.append(f"--max-size={max_size}")
+
+        bit_rate = self.setting("video_bit_rate")
+        if bit_rate and bit_rate != "8M":
+            cmd.append(f"-b={bit_rate}")
+
+        max_fps = self.setting("max_fps")
+        if max_fps:
+            cmd.append(f"--max-fps={max_fps}")
+
+        new_display = self.setting("new_display")
+        if new_display:
+            cmd.append(f"--new-display={new_display.strip()}")
+
+        custom_args = self.setting("custom_args")
+        if custom_args:
+            import shlex
+            cmd.extend(shlex.split(custom_args))
+
         self.mirroring = await android.start_tool(*cmd)
         spawn(self._watch_mirroring(self.mirroring), name="android:mirror")
         self.changed()

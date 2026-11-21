@@ -179,6 +179,20 @@ def test_mirroring() -> None:
         assert "--no-audio" in calls("scrcpy")[-1]
         p2.destroy()
 
+        # Mirroring with custom resolution, bitrate, fps and virtual display
+        p3 = plugin()
+        p3.device.config.settings.update(
+            {"max_size": 1080, "video_bit_rate": "16M", "max_fps": 60, "new_display": "1920x1080", "custom_args": "--hover"}
+        )
+        assert await p3.mirror() == {}
+        last_call = calls("scrcpy")[-1]
+        assert "--max-size=1080" in last_call
+        assert "-b=16M" in last_call
+        assert "--max-fps=60" in last_call
+        assert "--new-display=1920x1080" in last_call
+        assert "--hover" in last_call
+        p3.destroy()
+
     asyncio.run(run())
 
 
