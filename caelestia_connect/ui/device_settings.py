@@ -15,13 +15,15 @@ class DeviceSettings(Adw.PreferencesPage):
         self.app = app
         self.page = page
         self.device: dict = {}
+        self.state: dict = {}
         self._sig = ""
         self._groups: list[Adw.PreferencesGroup] = []
         self._expanded: set[str] = set()
 
-    def update(self, d: dict, _state: dict) -> None:
+    def update(self, d: dict, state: dict) -> None:
         self.device = d
-        sig = w.signature([d["id"], d["name"], d["address"], d["plugins"]])
+        self.state = state
+        sig = w.signature([d["id"], d["name"], d["address"], d["plugins"], state.get("android", {})])
         if sig == self._sig:
             return
         self._sig = sig
@@ -42,6 +44,51 @@ class DeviceSettings(Adw.PreferencesPage):
     def _build(self) -> None:
         d = self.device
         dev = d["id"]
+
+        # Dedicated Screen Mirroring (scrcpy) Section
+        p_android = next((p for p in d["plugins"] if p["id"] == "android"), None)
+        android_state = self.state.get("android", {})
+        if p_android and android_state.get("tools"):
+            scrcpy_group = self._group(
+                _("Screen Mirroring (scrcpy)"),
+                _("High-performance display mirroring, virtual display, resolution, framerate, and controls."),
+            )
+            sw_row, _ = switch_row(
+                self.app.theme,
+                _("Enable Screen Mirroring"),
+                p_android["description"],
+                p_android["enabled"],
+                on_toggle=lambda on: self._toggle("android", on),
+            )
+            scrcpy_group.add(sw_row)
+
+            if p_android["enabled"]:
+                is_mirroring = android_state.get("mirroring", False)
+                if is_mirroring:
+                    action_row = Adw.ButtonRow(title=_("Stop mirroring"), start_icon_name="media-playback-stop-symbolic")
+                    action_row.add_css_class("destructive-action")
+                    action_row.connect("activated", lambda *_: self.app.plugin(dev, "android", "stop_mirror"))
+                    scrcpy_group.add(action_row)
+
+                    screen_on = android_state.get("screenOn", True)
+                    screen_row = Adw.ButtonRow(
+                        title=_("Turn screen off") if screen_on else _("Turn screen on"),
+                        start_icon_name="video-display-symbolic",
+                    )
+                    screen_row.connect("activated", lambda *_: self.app.plugin(dev, "android", "toggle_screen"))
+                    scrcpy_group.add(screen_row)
+                else:
+                    action_row = Adw.ButtonRow(title=_("Start mirroring"), start_icon_name="media-playback-start-symbolic")
+                    action_row.add_css_class("suggested-action")
+                    from . import mirroring
+                    action_row.connect("activated", lambda *_: mirroring.show(self.app, self.page.window, self.device))
+                    scrcpy_group.add(action_row)
+
+                for s_ in p_android["settings"]:
+                    widget = self._setting_row("android", s_, p_android["values"].get(s_["key"], s_.get("default")))
+                    if widget is not None:
+                        scrcpy_group.add(widget)
+
         info = self._group(_("Device"))
         for title, value in (
             (_("Name"), d["name"]),
@@ -61,7 +108,7 @@ class DeviceSettings(Adw.PreferencesPage):
             _("Features"),
             _("Choose what this device can do. Some features also need permissions in KDE Connect on the phone."),
         )
-        for p in sorted(d["plugins"], key=lambda p: p["name"].lower()):
+        for p in sorted((p for p in d["plugins"] if p["id"] != "android"), key=lambda p: p["name"].lower()):
             arrow = None
             if p["settings"]:
                 # The options arrow sits right before the switch, so every switch stays aligned
