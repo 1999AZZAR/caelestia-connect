@@ -34,10 +34,21 @@ libraries.
 - Browsing the phone's files
 - Another computer running KDE Connect as an extra monitor
 - Bar icon and popout in the Caelestia shell
+- Native system tray icon (StatusNotifierItem) for KDE Plasma, Waybar, and GNOME
+- Bundled Material Symbols Rounded and Google Sans Flex fonts for standalone desktop use
 
 ## Installation
 
-Dependencies on Arch Linux:
+### Dependencies
+
+On Debian / Ubuntu:
+
+```sh
+sudo apt install -y gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev python3-cryptography wl-clipboard pulseaudio-utils
+sudo apt install -y sshfs scrcpy adb   # optional: file browsing, mirroring, phone camera
+```
+
+On Arch Linux:
 
 ```sh
 sudo pacman -S --needed python-gobject libadwaita python-cryptography python-evdev wl-clipboard libpulse

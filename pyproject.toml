@@ -18,7 +18,7 @@ caelestia-connect = "caelestia_connect.ui.app:main"
 include = ["caelestia_connect*"]
 
 [tool.setuptools.package-data]
-"caelestia_connect.ui" = ["style.css"]
+"caelestia_connect.ui" = ["style.css", "assets/**/*"]
 
 [tool.ruff]
 line-length = 120

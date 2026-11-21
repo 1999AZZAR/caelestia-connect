@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "caelestia"
 SCHEME_PATH = STATE_DIR / "scheme.json"
 FONT_CANDIDATES = [
+    Path(__file__).parent / "assets" / "fonts",
+    Path.home() / ".local/share/fonts/caelestia",
     Path.home() / ".config/quickshell/caelestia/assets/google-sans-flex",
     Path("/etc/xdg/quickshell/caelestia/assets/google-sans-flex"),
 ]
@@ -106,9 +108,13 @@ class Theme:
 
             fm = PangoCairo.FontMap.get_default()
             for d in FONT_CANDIDATES:
-                for f in sorted(d.glob("*.ttf")) if d.is_dir() else []:
-                    fm.add_font_file(str(f))
-                    return
+                if not d.is_dir():
+                    continue
+                for f in sorted(d.glob("*.ttf")):
+                    try:
+                        fm.add_font_file(str(f))
+                    except Exception as fe:
+                        log.debug("Could not add font file %s: %s", f, fe)
         except Exception as e:
             log.debug("Could not load Caelestia font: %s", e)
 

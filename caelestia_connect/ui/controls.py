@@ -304,10 +304,13 @@ class Switch(Gtk.DrawingArea):
             self.set_active(not self._active)
 
     def _update_state(self) -> None:
-        self.update_state(
-            [Gtk.AccessibleState.CHECKED],
-            [Gtk.AccessibleTristate.TRUE if self._active else Gtk.AccessibleTristate.FALSE],
-        )
+        try:
+            self.update_state(
+                [Gtk.AccessibleState.CHECKED],
+                [int(Gtk.AccessibleTristate.TRUE if self._active else Gtk.AccessibleTristate.FALSE)],
+            )
+        except Exception:
+            pass
 
     def _set_pressed(self, pressed: bool) -> None:
         self._pressed = pressed

@@ -81,7 +81,11 @@ command -v scrcpy >/dev/null || missing+=(scrcpy)
 command -v adb >/dev/null || missing+=(android-tools android-udev)
 if ((${#missing[@]})); then
     echo "   Optional/required packages missing: ${missing[*]}"
-    echo "   Install with: sudo pacman -S --needed ${missing[*]}"
+    if command -v pacman >/dev/null; then
+        echo "   Install on Arch with: sudo pacman -S --needed ${missing[*]}"
+    elif command -v apt-get >/dev/null; then
+        echo "   Install on Debian/Ubuntu with: sudo apt install -y gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev python3-cryptography wl-clipboard pulseaudio-utils sshfs scrcpy adb"
+    fi
 fi
 if [ ! -w /dev/uinput ]; then
     echo "   /dev/uinput is not writable: controlling this PC from the phone will not work."
@@ -101,7 +105,13 @@ EOF
     chmod +x "$BIN/$name"
 done
 
-echo ":: Installing desktop entry, icon and Nautilus extension"
+echo ":: Installing desktop entry, icon, fonts and Nautilus extension"
+FONTS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/caelestia"
+mkdir -p "$FONTS_DIR"
+if [ -d "$SRC/caelestia_connect/ui/assets/fonts" ]; then
+    cp -n "$SRC/caelestia_connect/ui/assets/fonts/"*.ttf "$FONTS_DIR/" 2>/dev/null || true
+    command -v fc-cache >/dev/null && fc-cache -f "$FONTS_DIR" 2>/dev/null || true
+fi
 sed "s|@BIN@|$BIN|g" "$SRC/data/org.caelestia.Connect.desktop" >"$APPS/org.caelestia.Connect.desktop"
 cp "$SRC/data/org.caelestia.Connect.svg" "$ICONS/"
 cp "$SRC/data/nautilus/caelestia_connect_nautilus.py" "$NAUTILUS/"

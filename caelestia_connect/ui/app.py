@@ -280,6 +280,6 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     from gi.events import GLibEventLoopPolicy
 
+    asyncio.set_event_loop_policy(GLibEventLoopPolicy())
     app = ConnectApp()
-    with GLibEventLoopPolicy():
-        return app.run(argv if argv is not None else sys.argv)
+    return app.run(argv if argv is not None else sys.argv)

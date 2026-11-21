@@ -357,7 +357,10 @@ class LanLink:
         except GLib.Error:
             pass
         if self._task and not self._task.done() and self._task is not asyncio.current_task():
-            self._task.cancel()
+            try:
+                self._task.cancel()
+            except TypeError:
+                pass
         if self.on_closed:
             self.on_closed(self)
 
@@ -433,7 +436,10 @@ class LanLinkProvider:
             Gio.NetworkMonitor.get_default().disconnect(self._monitor_id)
             self._monitor_id = 0
         if self._accept_task:
-            self._accept_task.cancel()
+            try:
+                self._accept_task.cancel()
+            except TypeError:
+                pass
         if self.listener:
             self.listener.close()
         if self.udp_transport:

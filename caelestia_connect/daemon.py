@@ -20,6 +20,7 @@ from .desktop.input import VirtualInput
 from .desktop.mpris import MprisClient
 from .desktop.notify import Notifier
 from .desktop.system import Battery, Session
+from .desktop.tray import StatusNotifierTray
 from .device import NOT_PAIRED, PAIRED, REQUESTED, REQUESTED_BY_PEER, Device
 from .i18n import _
 from .ipc import IpcServer
@@ -63,6 +64,7 @@ class Daemon:
         self.bluetooth = BluetoothLinkProvider(self) if discovery else None
         self.api = Api(self)
         self.ipc = IpcServer(self.api.handle)
+        self.tray = StatusNotifierTray(self)
         self._broadcast = Debouncer(0.08, self._send_state)
         self._pair_notifications: dict[str, int] = {}
         self._stopping = asyncio.Event()
@@ -80,6 +82,7 @@ class Daemon:
         await self.notifier.start()
         await self.session.start()
         await self.ipc.start()
+        await self.tray.start()
         await self.lan.start()
         if self.bluetooth:
             await self.bluetooth.start()
@@ -125,6 +128,7 @@ class Daemon:
         if self.bluetooth:
             self.bluetooth.stop()
         self.ipc.stop()
+        self.tray.stop()
         self.clipboard.stop()
         self.vinput.close()
         self._stopping.set()
@@ -228,7 +232,9 @@ class Daemon:
         }
 
     def _send_state(self) -> None:
-        self.ipc.broadcast({"event": "state", "data": self.state()})
+        st = self.state()
+        self.ipc.broadcast({"event": "state", "data": st})
+        self.tray.update(st)
 
 
 def _setup_logging(verbose: int) -> None:
@@ -285,9 +291,9 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             Gio.bus_unown_name(owner)
 
-    with GLibEventLoopPolicy():
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(run())
+    asyncio.set_event_loop_policy(GLibEventLoopPolicy())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(run())
     return exit_code
 
 
