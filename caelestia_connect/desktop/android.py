@@ -68,15 +68,34 @@ async def find(name: str, address: str) -> Scan:
         if address and serial.rpartition(":")[0] == address:
             scan.serial = serial
             return scan
+
+    target = name.casefold().strip()
     names = {}
     for serial in scan.authorized:
-        res = await adb("-s", serial, "shell", "settings", "get", "global", "device_name", timeout=4)
-        names[serial] = res.stdout.strip() if res.ok else ""
-        if names[serial].casefold() == name.casefold():
+        # Match by network IP if device is on the same subnet (e.g. over USB)
+        if address:
+            res_ip = await adb("-s", serial, "shell", "ip", "-f", "inet", "addr", timeout=4)
+            if res_ip.ok and address in res_ip.stdout:
+                scan.serial = serial
+                return scan
+
+        # Check hardware product model (e.g. Pixel 8)
+        res_model = await adb("-s", serial, "shell", "getprop", "ro.product.model", timeout=4)
+        model = res_model.stdout.strip() if res_model.ok else ""
+        if model and (model.casefold() == target or model.casefold() in target or target in model.casefold()):
             scan.serial = serial
             return scan
+
+        # Check user-configured device_name (e.g. Pixxy)
+        res_name = await adb("-s", serial, "shell", "settings", "get", "global", "device_name", timeout=4)
+        dev_name = res_name.stdout.strip() if res_name.ok else ""
+        names[serial] = dev_name or model
+        if dev_name and (dev_name.casefold() == target or dev_name.casefold() in target or target in dev_name.casefold()):
+            scan.serial = serial
+            return scan
+
     # A single device whose name could not be read is most likely this one
-    if len(scan.authorized) == 1 and not names[scan.authorized[0]]:
+    if len(scan.authorized) == 1 and not names.get(scan.authorized[0]):
         scan.serial = scan.authorized[0]
     return scan
 

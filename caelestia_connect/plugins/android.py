@@ -143,6 +143,17 @@ class AndroidPlugin(Plugin):
         self.changed()
 
     @action
+    async def stop_mirror(self) -> None:
+        if self.mirroring and self.mirroring.returncode is None:
+            self.mirroring.terminate()
+            try:
+                await asyncio.wait_for(self.mirroring.wait(), 3)
+            except (TimeoutError, ProcessLookupError):
+                pass
+            self.mirroring = None
+            self.changed()
+
+    @action
     async def camera(self, serial: str = "", facing: str = "") -> dict:
         if facing in ("front", "back"):
             self.set_setting("facing", facing)

@@ -109,9 +109,12 @@ class Overview(Gtk.ScrolledWindow):
             tiles.append(("mouse", _("Remote input"), lambda: self.page.show_page("remote")))
         android = d["state"].get("android", {})
         if w.plugin_loaded(self.device, "android") and android.get("tools"):
-            tiles.append(
-                ("screen_share", _("Mirror screen"), lambda: mirroring.show(self.app, self.page.window, self.device))
-            )
+            if android.get("mirroring"):
+                tiles.append(("stop_screen_share", _("Stop mirroring"), self._act("android", "stop_mirror")))
+            else:
+                tiles.append(
+                    ("screen_share", _("Mirror screen"), lambda: mirroring.show(self.app, self.page.window, self.device))
+                )
             if android.get("preview"):
                 tiles.append(("no_photography", _("Stop camera"), self._act("android", "stop_camera")))
             else:

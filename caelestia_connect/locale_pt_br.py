@@ -177,6 +177,7 @@ CATALOG: dict[str, str] = {
     "Choose the Android device to view and control in a separate window.": "Escolha o dispositivo Android para ver e controlar em uma janela separada.",
     "Android device": "Dispositivo Android",
     "Start mirroring": "Iniciar espelhamento",
+    "Stop mirroring": "Parar espelhamento",
     "Start camera": "Iniciar câmera",
     "Other apps can also use the camera as “Caelestia Phone Camera”.": "Outros apps também podem usar a câmera como “Caelestia Phone Camera”.",
     "To use the camera in other apps too, run ./install.sh --webcam once.": "Para usar a câmera em outros apps também, rode ./install.sh --webcam uma vez.",
