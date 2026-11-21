@@ -111,6 +111,14 @@ class Overview(Gtk.ScrolledWindow):
         if w.plugin_loaded(self.device, "android") and android.get("tools"):
             if android.get("mirroring"):
                 tiles.append(("stop_screen_share", _("Stop mirroring"), self._act("android", "stop_mirror")))
+                screen_on = android.get("screenOn", True)
+                tiles.append(
+                    (
+                        "screen_lock_portrait" if screen_on else "mobile_lock_portrait",
+                        _("Turn screen off") if screen_on else _("Turn screen on"),
+                        self._act("android", "toggle_screen"),
+                    )
+                )
             else:
                 tiles.append(
                     ("screen_share", _("Mirror screen"), lambda: mirroring.show(self.app, self.page.window, self.device))

@@ -49,6 +49,7 @@ class AndroidPlugin(Plugin):
         self.webcam = webcam.PhoneWebcam(self._serial, self._camera_options, self.changed)
         self.mirroring: asyncio.subprocess.Process | None = None
         self.preview: asyncio.Task | None = None
+        self._screen_on: bool = True
 
     async def connected(self):
         self._update_webcam()
@@ -98,6 +99,7 @@ class AndroidPlugin(Plugin):
         return {
             "tools": tools["adb"] and tools["scrcpy"],
             "mirroring": bool(self.mirroring and self.mirroring.returncode is None),
+            "screenOn": self._screen_on,
             "preview": bool(self.preview and not self.preview.done()),
             "webcam": {
                 "enabled": bool(self.setting("webcam")),
@@ -142,6 +144,9 @@ class AndroidPlugin(Plugin):
             cmd.append("--no-audio")
         if self.setting("turn_screen_off"):
             cmd.append("--turn-screen-off")
+            self._screen_on = False
+        else:
+            self._screen_on = True
         self.mirroring = await android.start_tool(*cmd)
         spawn(self._watch_mirroring(self.mirroring), name="android:mirror")
         self.changed()
@@ -153,6 +158,11 @@ class AndroidPlugin(Plugin):
         await process.wait()
         if self.mirroring is process:
             self.mirroring = None
+            if not self._screen_on:
+                serial = await self._serial()
+                if serial:
+                    await android.set_display_power(serial, True)
+                self._screen_on = True
         self.changed()
 
     @action
@@ -164,7 +174,35 @@ class AndroidPlugin(Plugin):
             except (TimeoutError, ProcessLookupError):
                 pass
             self.mirroring = None
+            if not self._screen_on:
+                serial = await self._serial()
+                if serial:
+                    await android.set_display_power(serial, True)
+                self._screen_on = True
             self.changed()
+
+    @action
+    async def toggle_screen(self) -> dict:
+        serial = await self._resolve("")
+        if not serial:
+            return {"error": _("The phone is not connected over USB or wireless debugging.")}
+        new_state = not self._screen_on
+        ok = await android.set_display_power(serial, new_state)
+        if ok:
+            self._screen_on = new_state
+            self.changed()
+        return {"screenOn": self._screen_on}
+
+    @action
+    async def set_screen(self, on: bool) -> dict:
+        serial = await self._resolve("")
+        if not serial:
+            return {"error": _("The phone is not connected over USB or wireless debugging.")}
+        ok = await android.set_display_power(serial, on)
+        if ok:
+            self._screen_on = on
+            self.changed()
+        return {"screenOn": self._screen_on}
 
     @action
     async def camera(self, serial: str = "", facing: str = "") -> dict:

@@ -178,6 +178,8 @@ CATALOG: dict[str, str] = {
     "Android device": "Dispositivo Android",
     "Start mirroring": "Iniciar espelhamento",
     "Stop mirroring": "Parar espelhamento",
+    "Turn screen off": "Desligar tela do celular",
+    "Turn screen on": "Ligar tela do celular",
     "Forward audio while mirroring": "Encaminhar áudio ao espelhar",
     "Turn phone screen off while mirroring": "Desligar a tela do celular ao espelhar",
     "Start camera": "Iniciar câmera",

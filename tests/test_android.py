@@ -47,6 +47,13 @@ elif args[:1] == ["-s"] and "media.camera" in args:
     print("  android.sensor.orientation (x):\n    [90 ]")
     print("== Camera HAL device front\n  android.lens.facing (x):\n    [FRONT ]")
     print("  android.sensor.orientation (x):\n    [270 ]")
+elif args[:1] == ["-s"] and "display" in args:
+    if "power-off" in args:
+        state["screen_on"] = False
+    elif "power-reset" in args:
+        state["screen_on"] = True
+    (tmp / "adb.json").write_text(json.dumps(state))
+    print(f"mState={'ON' if state.get('screen_on', True) else 'OFF'}")
 """
 FAKE_LONG = r"""#!/usr/bin/env python3
 import os, sys, time
@@ -280,6 +287,18 @@ def test_tools_die_with_the_daemon() -> None:
 def test_ioctl_numbers() -> None:
     assert webcam.SUBSCRIBE_EVENT == 0x4020565A
     assert webcam.DEQUEUE_EVENT == 0x80885659
+
+
+def test_toggle_screen() -> None:
+    async def run():
+        adb_state(devices={"ZY22": "device"}, names={"ZY22": "Pixel 9"}, screen_on=True)
+        p = plugin()
+        assert await p.toggle_screen() == {"screenOn": False}
+        assert not p.state()["screenOn"]
+        assert await p.toggle_screen() == {"screenOn": True}
+        assert p.state()["screenOn"]
+
+    asyncio.run(run())
 
 
 if __name__ == "__main__":

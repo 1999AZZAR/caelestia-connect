@@ -153,3 +153,28 @@ async def stop_tool(process: asyncio.subprocess.Process) -> None:
         except TimeoutError:
             process.kill()
             await process.wait()
+
+
+async def display_power(serial: str) -> bool:
+    """Return True if the physical display is on, False if off."""
+    res = await adb("-s", serial, "shell", "dumpsys", "display", timeout=4)
+    if res.ok:
+        for line in res.stdout.splitlines():
+            if "mState=" in line:
+                val = line.partition("mState=")[2].strip()
+                if "OFF" in val:
+                    return False
+                if "ON" in val:
+                    return True
+    return True
+
+
+async def set_display_power(serial: str, on: bool) -> bool:
+    """Turn the phone's physical screen on or off without interrupting mirroring."""
+    cmd = ("cmd", "display", "power-reset" if on else "power-off", "0")
+    res = await adb("-s", serial, "shell", *cmd, timeout=4)
+    if res.ok:
+        return True
+    key = "224" if on else "223"
+    res = await adb("-s", serial, "shell", "input", "keyevent", key, timeout=4)
+    return res.ok
