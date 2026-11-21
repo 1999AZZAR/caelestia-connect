@@ -187,7 +187,7 @@ def test_mirroring() -> None:
         assert await p3.mirror() == {}
         last_call = calls("scrcpy")[-1]
         assert "--max-size=1080" in last_call
-        assert "-b=16M" in last_call
+        assert "--video-bit-rate=16M" in last_call
         assert "--max-fps=60" in last_call
         assert "--new-display=1920x1080" in last_call
         assert "--hover" in last_call

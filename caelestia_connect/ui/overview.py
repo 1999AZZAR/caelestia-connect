@@ -115,7 +115,7 @@ class Overview(Gtk.ScrolledWindow):
                 tiles.append(
                     (
                         "screen_lock_portrait" if screen_on else "mobile_lock_portrait",
-                        _("Turn screen off") if screen_on else _("Turn screen on"),
+                        _("Turn screen off (Alt+O)") if screen_on else _("Turn screen on (Alt+Shift+O)"),
                         self._act("android", "toggle_screen"),
                     )
                 )

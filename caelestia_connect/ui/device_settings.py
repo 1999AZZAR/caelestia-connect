@@ -53,7 +53,7 @@ class DeviceSettings(Adw.PreferencesPage):
                 _("Screen Mirroring (scrcpy)"),
                 _("High-performance display mirroring, virtual display, resolution, framerate, and controls."),
             )
-            sw_row, _ = switch_row(
+            sw_row, _sw = switch_row(
                 self.app.theme,
                 _("Enable Screen Mirroring"),
                 p_android["description"],
@@ -72,7 +72,7 @@ class DeviceSettings(Adw.PreferencesPage):
 
                     screen_on = android_state.get("screenOn", True)
                     screen_row = Adw.ButtonRow(
-                        title=_("Turn screen off") if screen_on else _("Turn screen on"),
+                        title=_("Turn screen off (Alt+O)") if screen_on else _("Turn screen on (Alt+Shift+O)"),
                         start_icon_name="video-display-symbolic",
                     )
                     screen_row.connect("activated", lambda *_: self.app.plugin(dev, "android", "toggle_screen"))

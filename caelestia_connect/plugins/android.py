@@ -28,6 +28,7 @@ class AndroidPlugin(Plugin):
         {"key": "webcam", "type": "bool", "label": _("Use the camera as a webcam"), "default": True},
         {"key": "audio", "type": "bool", "label": _("Forward audio while mirroring"), "default": True},
         {"key": "turn_screen_off", "type": "bool", "label": _("Turn phone screen off while mirroring"), "default": False},
+        {"key": "stay_awake", "type": "bool", "label": _("Stay awake while mirroring"), "default": True},
         {
             "key": "max_size",
             "type": "choice",
@@ -102,6 +103,7 @@ class AndroidPlugin(Plugin):
         self.mirroring: asyncio.subprocess.Process | None = None
         self.preview: asyncio.Task | None = None
         self._screen_on: bool = True
+        self._mirror_audio: bool | None = None
 
     async def connected(self):
         self._update_webcam()
@@ -184,21 +186,27 @@ class AndroidPlugin(Plugin):
         return bool(self.setting("audio"))
 
     @action
-    async def mirror(self, serial: str = "", audio: bool | None = None) -> dict:
+    async def mirror(self, serial: str = "", audio: bool | None = None, screen_off: bool | None = None) -> dict:
         if self.mirroring and self.mirroring.returncode is None:
             return {}
         serial = await self._resolve(serial)
         if not serial:
             return {"error": _("The phone is not connected over USB or wireless debugging.")}
+        self._mirror_audio = audio
         cmd = ["scrcpy", "--serial", serial, f"--window-title={self.device.name}"]
         should_audio = self._audio_forwarding() if audio is None else audio
         if not should_audio:
             cmd.append("--no-audio")
-        if self.setting("turn_screen_off"):
+
+        should_screen_off = self.setting("turn_screen_off") if screen_off is None else screen_off
+        if should_screen_off:
             cmd.append("--turn-screen-off")
             self._screen_on = False
         else:
             self._screen_on = True
+
+        if self.setting("stay_awake"):
+            cmd.append("--stay-awake")
 
         max_size = self.setting("max_size")
         if max_size:
@@ -206,7 +214,7 @@ class AndroidPlugin(Plugin):
 
         bit_rate = self.setting("video_bit_rate")
         if bit_rate and bit_rate != "8M":
-            cmd.append(f"-b={bit_rate}")
+            cmd.append(f"--video-bit-rate={bit_rate}")
 
         max_fps = self.setting("max_fps")
         if max_fps:
@@ -261,6 +269,23 @@ class AndroidPlugin(Plugin):
         if not serial:
             return {"error": _("The phone is not connected over USB or wireless debugging.")}
         new_state = not self._screen_on
+        if self.mirroring and self.mirroring.returncode is None:
+            if self.setting("new_display"):
+                ok = await android.set_display_power(serial, new_state)
+                if ok:
+                    self._screen_on = new_state
+                    self.changed()
+                return {"screenOn": self._screen_on}
+
+            await self.stop_mirror()
+            await asyncio.sleep(0.2)
+            err = await self.mirror(serial, audio=self._mirror_audio, screen_off=not new_state)
+            if err.get("error"):
+                return err
+            self._screen_on = new_state
+            self.changed()
+            return {"screenOn": self._screen_on}
+
         ok = await android.set_display_power(serial, new_state)
         if ok:
             self._screen_on = new_state
@@ -272,6 +297,24 @@ class AndroidPlugin(Plugin):
         serial = await self._resolve("")
         if not serial:
             return {"error": _("The phone is not connected over USB or wireless debugging.")}
+        if self.mirroring and self.mirroring.returncode is None:
+            if self._screen_on != on:
+                if self.setting("new_display"):
+                    ok = await android.set_display_power(serial, on)
+                    if ok:
+                        self._screen_on = on
+                        self.changed()
+                    return {"screenOn": self._screen_on}
+
+                await self.stop_mirror()
+                await asyncio.sleep(0.2)
+                err = await self.mirror(serial, audio=self._mirror_audio, screen_off=not on)
+                if err.get("error"):
+                    return err
+            self._screen_on = on
+            self.changed()
+            return {"screenOn": self._screen_on}
+
         ok = await android.set_display_power(serial, on)
         if ok:
             self._screen_on = on
