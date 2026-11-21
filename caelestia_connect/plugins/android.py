@@ -26,6 +26,8 @@ class AndroidPlugin(Plugin):
     device_types = ("phone", "tablet")
     settings_schema = [
         {"key": "webcam", "type": "bool", "label": _("Use the camera as a webcam"), "default": True},
+        {"key": "audio", "type": "bool", "label": _("Forward audio while mirroring"), "default": True},
+        {"key": "turn_screen_off", "type": "bool", "label": _("Turn phone screen off while mirroring"), "default": False},
         {
             "key": "facing",
             "type": "choice",
@@ -122,14 +124,25 @@ class AndroidPlugin(Plugin):
             return True
         return process.returncode == 0
 
+    def _audio_forwarding(self) -> bool:
+        if hasattr(self.device, "plugin_enabled") and not self.device.plugin_enabled("phoneaudio"):
+            return False
+        return bool(self.setting("audio"))
+
     @action
-    async def mirror(self, serial: str = "") -> dict:
+    async def mirror(self, serial: str = "", audio: bool | None = None) -> dict:
         if self.mirroring and self.mirroring.returncode is None:
             return {}
         serial = await self._resolve(serial)
         if not serial:
             return {"error": _("The phone is not connected over USB or wireless debugging.")}
-        self.mirroring = await android.start_tool("scrcpy", "--serial", serial, f"--window-title={self.device.name}")
+        cmd = ["scrcpy", "--serial", serial, f"--window-title={self.device.name}"]
+        should_audio = self._audio_forwarding() if audio is None else audio
+        if not should_audio:
+            cmd.append("--no-audio")
+        if self.setting("turn_screen_off"):
+            cmd.append("--turn-screen-off")
+        self.mirroring = await android.start_tool(*cmd)
         spawn(self._watch_mirroring(self.mirroring), name="android:mirror")
         self.changed()
         if not await self._started(self.mirroring):

@@ -165,6 +165,13 @@ def test_mirroring() -> None:
         finally:
             (TMP / "scrcpy.fail").unlink()
 
+        # Mirroring with audio disabled
+        p2 = plugin()
+        p2.device.config.settings["audio"] = False
+        assert await p2.mirror() == {}
+        assert "--no-audio" in calls("scrcpy")[-1]
+        p2.destroy()
+
     asyncio.run(run())
 
 

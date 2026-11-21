@@ -36,6 +36,9 @@ class PhoneAudioPlugin(Plugin):
         self._remember_address()
 
     def destroy(self):
+        phone = self._phone()
+        if phone and phone.on_computer:
+            spawn(self.audio.set_on_computer(phone, False), name="phoneaudio:disconnect")
         self.audio.stop()
 
     def _remember_address(self) -> None:
