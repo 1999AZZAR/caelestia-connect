@@ -23,7 +23,8 @@ class DeviceSettings(Adw.PreferencesPage):
     def update(self, d: dict, state: dict) -> None:
         self.device = d
         self.state = state
-        sig = w.signature([d["id"], d["name"], d["address"], d["plugins"], state.get("android", {})])
+        android_state = d.get("state", {}).get("android", {}) or state.get("android", {})
+        sig = w.signature([d["id"], d["name"], d["address"], d["plugins"], android_state])
         if sig == self._sig:
             return
         self._sig = sig
@@ -47,8 +48,8 @@ class DeviceSettings(Adw.PreferencesPage):
 
         # Dedicated Screen Mirroring (scrcpy) Section
         p_android = next((p for p in d["plugins"] if p["id"] == "android"), None)
-        android_state = self.state.get("android", {})
-        if p_android and android_state.get("tools"):
+        android_state = d.get("state", {}).get("android", {}) or self.state.get("android", {})
+        if p_android:
             scrcpy_group = self._group(
                 _("Screen Mirroring (scrcpy)"),
                 _("High-performance display mirroring, virtual display, resolution, framerate, and controls."),
@@ -63,7 +64,15 @@ class DeviceSettings(Adw.PreferencesPage):
             scrcpy_group.add(sw_row)
 
             if p_android["enabled"]:
-                is_mirroring = android_state.get("mirroring", False)
+                if not android_state.get("tools", True):
+                    warning_row = Adw.ActionRow(
+                        title=_("Missing tools"),
+                        subtitle=_("scrcpy and adb must be installed on your computer to mirror the screen."),
+                    )
+                    warning_row.add_css_class("warning")
+                    scrcpy_group.add(warning_row)
+                else:
+                    is_mirroring = android_state.get("mirroring", False)
                 if is_mirroring:
                     action_row = Adw.ButtonRow(title=_("Stop mirroring"), start_icon_name="media-playback-stop-symbolic")
                     action_row.add_css_class("destructive-action")
