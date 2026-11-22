@@ -4,13 +4,7 @@ A standalone KDE Connect client written from scratch in Python and GTK4 / Libadw
 
 Originally created for the [Caelestia shell](https://github.com/caelestia-dots/shell), this fork adapts Caelestia Connect for standalone use across Linux desktop environments (KDE Plasma, GNOME, Hyprland, Sway, and Waybar) with native file manager integration, connection stability improvements, and expanded screen mirroring controls.
 
-![Overview](docs/screenshots/overview.png)
-
-| Messages | Settings |
-|---|---|
-| ![Messages](docs/screenshots/messages.png) | ![Settings](docs/screenshots/settings.png) |
-| **Remote input** | |
-| ![Remote input](docs/screenshots/remote.png) | |
+![Caelestia Connect](docs/illustrations/caelestia-bridge.png)
 
 ## Fork improvements
 
