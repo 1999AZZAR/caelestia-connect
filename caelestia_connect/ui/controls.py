@@ -8,7 +8,6 @@ from __future__ import annotations
 import math
 import time
 
-import cairo
 from collections.abc import Callable
 
 from gi.repository import Adw, Gdk, GObject, Gtk
@@ -192,60 +191,48 @@ class Slider(Gtk.DrawingArea):
     def _draw(self, _area, cr, width: int, height: int) -> None:
         enabled = self.get_sensitive()
         fg = self.theme.rgba("primary") if enabled else self.theme.rgba("onSurface", 0.38)
-        bg = self.theme.rgba("secondaryContainer") if enabled else self.theme.rgba("onSurface", 0.1)
+        bg = self.theme.rgba("outlineVariant") if enabled else self.theme.rgba("onSurface", 0.12)
         cy = height / 2
-        track = self.track
-        filled_w = self._usable_width() * min(1.0, max(0.0, self._shown))
+        track_h = 6.0
+        knob_r = 9.0
+        usable_w = max(1.0, width - 2 * knob_r)
+        filled_w = usable_w * min(1.0, max(0.0, self._shown))
 
-        cr.set_source_rgba(*fg)
-        if self.wavy:
-            lw = int(track * 0.7)
-            amplitude = lw * 0.5
-            full = self._usable_width()
-            start, end = lw / 2, filled_w - lw / 2
-            if end > start:
-                cr.set_line_width(lw)
-                cr.set_line_cap(cairo.LINE_CAP_ROUND)
-                cr.set_line_join(cairo.LINE_JOIN_ROUND)
-                x = start
-                cr.move_to(x, cy + amplitude * math.sin(self.frequency * 2 * math.pi * x / full + self._phase))
-                while x < end:
-                    x = min(end, x + 1)
-                    cr.line_to(x, cy + amplitude * math.sin(self.frequency * 2 * math.pi * x / full + self._phase))
-                cr.stroke()
-        elif filled_w > 0:
-            _rounded_rect(cr, 0, cy - track / 2, filled_w, track, self.radius, INNER_RADIUS, INNER_RADIUS, self.radius)
-            cr.fill()
-
-        hx = filled_w + GAP if filled_w > 0 else 0
-        hh = track * self._handle_mult
-        _rounded_rect(cr, hx, cy - hh / 2, HANDLE_W, hh, 2, 2, 2, 2)
-        cr.set_source_rgba(*fg)
+        # Background track
+        cr.set_source_rgba(*bg)
+        _rounded_rect(
+            cr, knob_r, cy - track_h / 2, usable_w, track_h, track_h / 2, track_h / 2, track_h / 2, track_h / 2
+        )
         cr.fill()
 
-        # Remaining part, shrinking as it gets shorter, with the stop indicator at the end
-        rx = hx + HANDLE_W + GAP
-        rw = width - rx
-        if rw > 0:
-            op = min(rw, 12) / 12
-            rh = track * (op if track <= 12 else min(op * 2, 1))
-            cr.set_source_rgba(bg[0], bg[1], bg[2], bg[3] * op)
-            _rounded_rect(cr, rx, cy - rh / 2, rw, rh, INNER_RADIUS, self.radius, self.radius, INNER_RADIUS)
+        # Filled track
+        if filled_w > 0:
+            cr.set_source_rgba(*fg)
+            _rounded_rect(
+                cr, knob_r, cy - track_h / 2, filled_w, track_h, track_h / 2, track_h / 2, track_h / 2, track_h / 2
+            )
             cr.fill()
-            dot = 4 * op
-            if dot > 0.5:
-                cr.set_source_rgba(fg[0], fg[1], fg[2], fg[3] * op)
-                cr.arc(width - 4 * op - dot / 2, cy, dot / 2, 0, 2 * math.pi)
-                cr.fill()
+
+        # Circular Apple Knob with shadow
+        kx = knob_r + filled_w
+        if enabled:
+            cr.set_source_rgba(0, 0, 0, 0.22)
+            cr.arc(kx, cy + 1.0, knob_r, 0, 2 * math.pi)
+            cr.fill()
+            cr.set_source_rgba(1.0, 1.0, 1.0, 1.0)
+        else:
+            cr.set_source_rgba(*self.theme.rgba("onSurface", 0.4))
+        cr.arc(kx, cy, knob_r, 0, 2 * math.pi)
+        cr.fill()
 
 
 class Switch(Gtk.DrawingArea):
-    """StyledSwitch: pill track, round thumb that stretches while pressed, check / cross glyph."""
+    """Apple HIG switch: capsule track, pure white round knob with subtle drop shadow."""
 
     __gtype_name__ = "CaelestiaSwitch"
 
-    WIDTH = 54
-    HEIGHT = 32
+    WIDTH = 46
+    HEIGHT = 26
 
     def __init__(self, theme, active: bool = False) -> None:
         super().__init__(
@@ -356,17 +343,13 @@ class Switch(Gtk.DrawingArea):
         t = self._pos
         th = self.theme
         if enabled:
-            # Colours.layer() in the shell lifts the off state above the row it sits on
-            on_track, off_track = (
-                th.rgba("primary"),
-                _blend(th.rgba("surfaceContainerHighest"), th.rgba("onSurface"), 0.1),
-            )
-            on_thumb, off_thumb = th.rgba("onPrimary"), _blend(th.rgba("outline"), th.rgba("onSurface"), 0.15)
-            on_icon, off_icon = th.rgba("primary"), th.rgba("surfaceContainerHighest")
+            on_track = th.rgba("success")
+            off_track = (0.22, 0.22, 0.24, 1.0) if th.mode == "dark" else (0.88, 0.88, 0.90, 1.0)
+            thumb_color = (1.0, 1.0, 1.0, 1.0)
         else:
-            on_track, off_track = th.rgba("onSurface", 0.12), th.rgba("surfaceContainerHighest", 0.38)
-            on_thumb, off_thumb = th.rgba("surface"), th.rgba("onSurface", 0.12)
-            on_icon, off_icon = th.rgba("outline"), th.rgba("surfaceContainer")
+            on_track = th.rgba("onSurface", 0.12)
+            off_track = th.rgba("surfaceContainerHighest", 0.38)
+            thumb_color = th.rgba("onSurface", 0.4)
 
         def mix(a, b):
             return tuple(a[i] * t + b[i] * (1 - t) for i in range(4))
@@ -377,37 +360,19 @@ class Switch(Gtk.DrawingArea):
         cr.fill()
 
         pad = 2.0
-        th_h = self.HEIGHT - 4
-        th_w = th_h * (1 + 0.2 * self._stretch)
+        th_h = self.HEIGHT - 4.0
+        th_w = th_h * (1 + 0.15 * self._stretch)
         tx = x0 + pad + (self.WIDTH - th_w - 2 * pad) * t
         ty = y0 + (self.HEIGHT - th_h) / 2
-        _rounded_rect(cr, tx, ty, th_w, th_h, *(th_h / 2,) * 4)
-        cr.set_source_rgba(*mix(on_thumb, off_thumb))
-        cr.fill()
-        if self._hover or self._pressed:
-            hl = mix(th.rgba("primary"), th.rgba("onSurface"))
-            _rounded_rect(cr, tx, ty, th_w, th_h, *(th_h / 2,) * 4)
-            cr.set_source_rgba(hl[0], hl[1], hl[2], 0.1 if self._pressed else 0.08)
+
+        if enabled:
+            cr.set_source_rgba(0, 0, 0, 0.22)
+            _rounded_rect(cr, tx, ty + 1.0, th_w, th_h, *(th_h / 2,) * 4)
             cr.fill()
 
-        # Glyph: a check when on, a cross when off, morphing between both
-        size = th_h - 12
-        gx, gy = tx + (th_w - size) / 2, ty + (th_h - size) / 2
-
-        def P(fx, fy):
-            return gx + size * fx, gy + size * fy
-
-        cross = ((0.15, 0.15), (0.85, 0.85), (0.15, 0.85), (0.85, 0.15))
-        check = ((0.15, 0.5), (0.4, 0.7), (0.4, 0.7), (0.85, 0.2))
-        pts = [P(c[0] * t + x[0] * (1 - t), c[1] * t + x[1] * (1 - t)) for c, x in zip(check, cross, strict=True)]
-        cr.set_line_width(2.4)
-        cr.set_line_cap(cairo.LINE_CAP_ROUND)
-        cr.set_source_rgba(*mix(on_icon, off_icon))
-        cr.move_to(*pts[0])
-        cr.line_to(*pts[1])
-        cr.move_to(*pts[2])
-        cr.line_to(*pts[3])
-        cr.stroke()
+        cr.set_source_rgba(*thumb_color)
+        _rounded_rect(cr, tx, ty, th_w, th_h, *(th_h / 2,) * 4)
+        cr.fill()
 
 
 def switch_row(
