@@ -80,6 +80,22 @@ async def _read_line(stream: Gio.DataInputStream, limit: int) -> bytes | None:
     return bytes(line)
 
 
+def _discard(conn: Gio.SocketConnection, tls: Gio.TlsConnection | None) -> None:
+    """Close both wrappers of a failed connection.
+
+    Gio objects are reference-counted on the native heap; dropping only the socket
+    leaves the TLS stream (and its buffers) allocated, which is what made a
+    reconnect storm grow the daemon to gigabytes.
+    """
+    for stream in (tls, conn):
+        if stream is None:
+            continue
+        try:
+            stream.close(None)
+        except (GLib.Error, AttributeError, TypeError):
+            pass
+
+
 def link_info(ident: Packet, device_id: str, protocol_version: int) -> dict[str, Any] | None:
     """The device description from an identity packet, or None if it is not a valid one."""
     name = config.filter_device_name(ident.get_str("deviceName"))
@@ -376,6 +392,12 @@ class LanLinkProvider:
         self.links: dict[str, LanLink] = {}
         self._last_by_ip: dict[str, float] = {}
         self._last_by_id: dict[str, float] = {}
+        # Failed handshakes are retried with exponential backoff. A device that can
+        # never complete TLS (a stale duplicate identity of this machine, for
+        # example) used to be dialed twice a second forever, and each attempt leaked
+        # native memory until the daemon reached 21 GB.
+        self._connect_failures: dict[str, int] = {}
+        self._retry_at: dict[str, float] = {}
         self._accept_task: asyncio.Task | None = None
         self._monitor_id = 0
         self._last_network_change = 0.0
@@ -397,6 +419,10 @@ class LanLinkProvider:
             log.info("Listening on TCP port %d", self.tcp_port)
             self._accept_task = spawn(self._accept_loop(), name="lan:accept")
 
+        # Know our own addresses before the first reconnect sweep: a stale identity
+        # for this machine is stored with one of them as its address, and dialling
+        # it can never complete a handshake.
+        await self._local_ipv4()
         if not self.discovery:
             log.info("Discovery disabled: only direct connections are accepted")
             return
@@ -518,6 +544,31 @@ class LanLinkProvider:
                 s.close()
         log.debug("Broadcasted identity to %s", ", ".join(sorted(targets)))
 
+    def _is_self_address(self, host: str) -> bool:
+        """True for one of this machine's own interface addresses.
+
+        Loopback stays allowed (tests and deliberate local relays); a peer that
+        reaches us on our own LAN or tunnel address is another daemon on this
+        host, and pairing the two against each other only produces a reconnect
+        loop.
+        """
+        return host in self.local_addresses and host not in {"127.0.0.1", "::1"}
+
+    def _note_connect_failure(self, device_id: str) -> None:
+        failures = self._connect_failures.get(device_id, 0) + 1
+        self._connect_failures[device_id] = failures
+        delay = min(const.MAX_RETRY_SECONDS, const.RATE_LIMIT_SECONDS * (2 ** min(failures - 1, 8)))
+        self._retry_at[device_id] = time.monotonic() + delay
+        log.debug("Backing off %s for %.1fs after %d failed attempt(s)", device_id, delay, failures)
+
+    def _note_connect_success(self, device_id: str) -> None:
+        self._connect_failures.pop(device_id, None)
+        self._retry_at.pop(device_id, None)
+
+    def _backing_off(self, device_id: str) -> bool:
+        until = self._retry_at.get(device_id)
+        return until is not None and time.monotonic() < until
+
     def _rate_limited(self, table: dict[str, float], key: str) -> bool:
         now = time.monotonic()
         if len(table) > 1024:
@@ -555,6 +606,15 @@ class LanLinkProvider:
             return
         if not (const.MIN_TCP_PORT <= port <= const.MAX_TCP_PORT):
             return
+        # Dialing ourselves is never useful, and a stale identity for this machine
+        # produces a handshake that can never succeed.
+        if device_id == self.daemon.identity.device_id:
+            return
+        if self._is_self_address(host):
+            log.debug("Not connecting to our own address %s for %s", host, device_id)
+            return
+        if self._backing_off(device_id):
+            return
         if not force and self._rate_limited(self._last_by_id, device_id):
             return
         if self._is_downgrade(device_id, protocol_version):
@@ -580,6 +640,7 @@ class LanLinkProvider:
             conn = await client.connect_async(Gio.InetSocketAddress.new_from_string(host, port))
         except (GLib.Error, TypeError) as e:
             log.info("Could not connect to %s:%d (%s), asking for a reverse connection", host, port, e)
+            self._note_connect_failure(device_id)
             await self.broadcast(extra=[host])
             return
         # The connect timeout would otherwise apply to every later read and kill idle links
@@ -593,8 +654,12 @@ class LanLinkProvider:
         except GLib.Error as e:
             log.info("Could not send identity to %s: %s", host, e.message)
             conn.close()
+            self._note_connect_failure(device_id)
             return
-        await self._secure(conn, device_id, protocol_version, as_server=True, port=port)
+        if await self._secure(conn, device_id, protocol_version, as_server=True, port=port):
+            self._note_connect_success(device_id)
+        else:
+            self._note_connect_failure(device_id)
 
     async def _accept_loop(self) -> None:
         while True:
@@ -607,6 +672,10 @@ class LanLinkProvider:
                 await asyncio.sleep(0.5)
                 continue
             host = _peer_address(conn)
+            if self._is_self_address(host):
+                log.debug("Ignoring inbound connection from our own address %s", host)
+                conn.close()
+                continue
             if self._rate_limited(self._last_by_ip, f"tcp:{host}"):
                 conn.close()
                 continue
@@ -653,8 +722,9 @@ class LanLinkProvider:
 
     async def _secure(
         self, conn: Gio.SocketConnection, device_id: str, protocol_version: int, as_server: bool, port: int = 0
-    ) -> None:
+    ) -> bool:
         host = _peer_address(conn)
+        tls: Gio.TlsConnection | None = None
         trusted = self.daemon.trusted.get(device_id)
         expected_der = None
         if trusted:
@@ -667,15 +737,15 @@ class LanLinkProvider:
             and sum(1 for link in self.links.values() if link.device_id not in self.daemon.trusted)
             >= const.MAX_UNPAIRED_CONNECTIONS
         ):
-            conn.close()
-            return
+            _discard(conn, tls)
+            return False
         tls = (_tls_server if as_server else _tls_client)(conn, self.tls_cert, expected_der)
         try:
             await asyncio.wait_for(tls.handshake_async(PRIO), const.IDENTITY_TIMEOUT)
         except (TimeoutError, GLib.Error) as e:
             log.info("TLS handshake with %s (%s) failed: %s", device_id, host, getattr(e, "message", e))
-            conn.close()
-            return
+            _discard(conn, tls)
+            return False
 
         try:
             await tls.get_output_stream().write_all_async(
@@ -690,31 +760,31 @@ class LanLinkProvider:
             ident = Packet.parse(line)
         except (TimeoutError, GLib.Error, ValueError) as e:
             log.info("Encrypted identity exchange with %s failed: %s", device_id, getattr(e, "message", e))
-            conn.close()
-            return
+            _discard(conn, tls)
+            return False
 
         info = link_info(ident, device_id, protocol_version)
         if info is None:
             log.warning("Device %s does not implement protocol version 8 correctly", device_id)
-            conn.close()
-            return
+            _discard(conn, tls)
+            return False
 
         peer_gcert = tls.get_peer_certificate()
         if peer_gcert is None:
             log.warning("Device %s did not present a certificate", device_id)
-            conn.close()
-            return
+            _discard(conn, tls)
+            return False
         peer_cert = crypto.cert_from_der(_gio_cert_der(peer_gcert))
         if crypto.cert_common_name(peer_cert) != device_id:
             log.warning("Certificate CN does not match device id %s", device_id)
-            conn.close()
-            return
+            _discard(conn, tls)
+            return False
 
         old = self.links.get(device_id)
         if old is not None and not old.closed and not crypto.same_certificate(old.peer_cert, peer_cert):
             log.warning("Refusing to replace link to %s with a different certificate", device_id)
-            conn.close()
-            return
+            _discard(conn, tls)
+            return False
 
         link = LanLink(self, tls, conn, info, peer_cert, host, reader)
         link.on_closed = self._link_closed
@@ -725,6 +795,7 @@ class LanLinkProvider:
         if old is not None and not old.closed:
             old.on_closed = None
             old.close()
+        return True
 
     def _link_closed(self, link: LanLink) -> None:
         if self.links.get(link.device_id) is link:
