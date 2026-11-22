@@ -120,6 +120,8 @@ echo ":: Installing the Dolphin share action"
 KIO_SERVICEMENUS="${XDG_DATA_HOME:-$HOME/.local/share}/kio/servicemenus"
 mkdir -p "$KIO_SERVICEMENUS"
 sed "s|@BIN@|$BIN|g" "$SRC/data/kio/servicemenus/caelestia-share.desktop" >"$KIO_SERVICEMENUS/caelestia-share.desktop"
+# KDE ignores a user-owned service menu without the executable bit.
+chmod 755 "$KIO_SERVICEMENUS/caelestia-share.desktop"
 install -m 755 "$SRC/data/kio/caelestia-share" "$BIN/caelestia-share"
 command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 --noincremental 2>/dev/null || true
 command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
