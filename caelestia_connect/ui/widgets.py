@@ -111,24 +111,25 @@ TILE_COLORS = {
 
 
 class Tile(Gtk.Button):
-    """Quick action tile: Apple squircle badge icon over a clean label."""
+    """Quick action tile: Apple squircle badge icon beside a clean label."""
 
     def __init__(self, icon: str, text: str, callback=None, tooltip: str = "") -> None:
         super().__init__()
         self.add_css_class("tile")
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
-        badge = Gtk.CenterBox(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, valign=Gtk.Align.CENTER)
+        badge = Gtk.CenterBox(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, hexpand=False, vexpand=False)
         badge.add_css_class("tile-icon-badge")
         color_class = TILE_COLORS.get(icon, "accent-blue")
         badge.add_css_class(color_class)
         self.icon = Icon(icon, "medium")
         badge.set_center_widget(self.icon)
         box.append(badge)
-        self.text = label(text, xalign=0.5, wrap=True, css=["body-small"])
-        self.text.set_justify(Gtk.Justification.CENTER)
-        self.text.set_lines(2)
-        self.text.set_ellipsize(Pango.EllipsizeMode.END)
+
+        self.text = label(text, xalign=0.0, ellipsize=True, css=["tile-title"])
+        self.text.set_hexpand(True)
+        self.text.set_valign(Gtk.Align.CENTER)
         box.append(self.text)
+
         self.set_child(box)
         if tooltip:
             self.set_tooltip_text(tooltip)

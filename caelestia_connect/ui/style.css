@@ -1,6 +1,7 @@
 /* Caelestia Connect - Apple Human Interface Guidelines (macOS Sonoma / Sequoia)
    Refined first-party desktop aesthetics: Inset Grouped sections, Control Center squircle tiles,
-   macOS sidebar source lists, segmented control navigation, and authentic Apple typography. */
+   macOS sidebar source lists, segmented control navigation, authentic Apple typography,
+   and multi-layered glassmorphic acrylic depth with subtle specular lighting. */
 
 :root {
   --accent-bg-color: #%(primary)s;
@@ -43,12 +44,13 @@ window, .background {
   font-family: %(sans)s;
 }
 
-/* macOS Window Frame */
+/* macOS Window Frame (Glassmorphic Acrylic Vibrancy) */
 window.caelestia {
-  background-color: alpha(#%(background)s, 0.98);
+  background-color: alpha(#%(background)s, 0.80);
   color: #%(onSurface)s;
   border-radius: var(--window-radius);
-  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  border: 1px solid alpha(#ffffff, 0.14);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), inset 0 1px 0 0 alpha(#ffffff, 0.16);
 }
 
 /* Iconography with Apple System proportions */
@@ -72,106 +74,145 @@ window.caelestia {
 .body-small { font-size: 11px; color: #%(onSurfaceVariant)s; }
 .label-caps {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  color: #%(onSurfaceVariant)s;
+  color: alpha(#%(onSurfaceVariant)s, 0.75);
   letter-spacing: 0.6px;
+}
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: alpha(#%(onSurfaceVariant)s, 0.75);
 }
 .dim { color: #%(onSurfaceVariant)s; }
 .primary-text { color: #%(primary)s; }
 .error-text { color: #%(error)s; }
 
-/* Unified Toolbar / Headerbar */
+/* Unified Translucent Toolbar / Headerbar */
 headerbar {
-  background-color: #%(surfaceContainerLow)s;
-  border-bottom: 1px solid #%(outlineVariant)s;
+  background-color: alpha(#%(surfaceContainerLow)s, 0.50);
+  border-bottom: 1px solid alpha(#ffffff, 0.08);
   box-shadow: none;
   min-height: 48px;
   padding: 0 10px;
 }
 
-/* macOS Full-Height Sidebar Source List */
+/* macOS Full-Height Translucent Sidebar */
 .navigation-sidebar {
-  background-color: #%(surfaceContainerLow)s;
-  border-right: 1px solid #%(outlineVariant)s;
+  background-color: alpha(#%(surfaceContainerLow)s, 0.38);
+  border-right: 1px solid alpha(#ffffff, 0.08);
 }
 .navigation-sidebar row, list.devices row {
   border-radius: 10px;
-  margin: 2px 10px;
+  margin: 2px 8px;
   padding: 7px 10px;
   min-height: 44px;
-  transition: all 120ms ease-out;
+  transition: all 120ms cubic-bezier(0.2, 0, 0, 1);
+  background-color: transparent;
+  border: 1px solid transparent;
 }
 .navigation-sidebar row:hover, list.devices row:hover {
-  background-color: alpha(#%(onSurface)s, 0.06);
+  background-color: alpha(#ffffff, 0.06);
+  border-color: alpha(#ffffff, 0.04);
 }
-.navigation-sidebar row:selected, list.devices row:selected {
-  background-color: alpha(#ffffff, 0.12);
+.navigation-sidebar row:selected,
+list.devices row:selected,
+list.devices > row:selected,
+.navigation-sidebar > row:selected,
+row.activatable:selected,
+list > row.activatable:selected {
+  background-color: alpha(#ffffff, 0.14);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.09), alpha(#ffffff, 0.02));
+  border: 1px solid alpha(#ffffff, 0.14);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.18), 0 2px 6px rgba(0, 0, 0, 0.15);
   color: #ffffff;
 }
-.navigation-sidebar row:selected .title-medium, list.devices row:selected .title-medium {
+.navigation-sidebar row:selected .title-medium,
+list.devices row:selected .title-medium,
+.navigation-sidebar row:selected label,
+list.devices row:selected label {
   color: #ffffff;
   font-weight: 600;
 }
-.navigation-sidebar row:selected .body-small, list.devices row:selected .body-small {
-  color: alpha(#ffffff, 0.72);
+.navigation-sidebar row:selected .body-small,
+list.devices row:selected .body-small {
+  color: alpha(#ffffff, 0.75);
 }
 .navigation-sidebar row .avatar, list.devices row .avatar {
   border-radius: 8px;
   min-width: 32px; min-height: 32px;
   background-color: alpha(#%(onSurface)s, 0.08);
+  border: 1px solid alpha(#ffffff, 0.08);
   color: #%(onSurfaceVariant)s;
 }
 .navigation-sidebar row .avatar.connected, list.devices row .avatar.connected {
   background-color: #%(primary)s;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
   color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  border: 1px solid alpha(#ffffff, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
 }
 .navigation-sidebar row .avatar.offline, list.devices row .avatar.offline {
   background-color: alpha(#%(onSurface)s, 0.1);
   color: #%(onSurfaceVariant)s;
+  border: 1px solid alpha(#ffffff, 0.05);
 }
 list.flat { background: transparent; }
 list.flat row { border-radius: 10px; }
 
-/* Host Card ("This PC" - Apple ID / Mac Profile Style) */
+/* Host Card ("This PC" - Frosted Glass Profile Plate) */
 .host-card {
-  background-color: alpha(#%(onSurface)s, 0.04);
+  background-color: alpha(#%(surfaceContainer)s, 0.45);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
   border-radius: 12px;
-  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  border: 1px solid alpha(#ffffff, 0.10);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
   padding: 10px 12px;
 }
 .host-card .avatar {
   border-radius: 8px;
   min-width: 32px; min-height: 32px;
   background: linear-gradient(135deg, #%(primary)s, #%(secondary)s);
+  border: 1px solid alpha(#ffffff, 0.25);
   color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
 }
 
-/* Inset Grouped Surfaces & Cards */
+/* Inset Grouped Surfaces & Cards (Frosted Glass Acrylic) */
 .surface-card {
-  background-color: #%(surfaceContainer)s;
-  border-radius: 16px;
-  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  background-color: alpha(#%(surfaceContainer)s, 0.50);
+  background-image: linear-gradient(145deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
+  border-radius: 18px;
+  border: 1px solid alpha(#ffffff, 0.11);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.18), 0 6px 20px rgba(0, 0, 0, 0.14);
   padding: 18px 20px;
 }
-.surface-card.high { background-color: #%(surfaceContainerHigh)s; }
+.surface-card.high {
+  background-color: alpha(#%(surfaceContainerHigh)s, 0.65);
+  background-image: linear-gradient(145deg, alpha(#ffffff, 0.10), alpha(#ffffff, 0.03));
+  border-color: alpha(#ffffff, 0.14);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.22), 0 8px 24px rgba(0, 0, 0, 0.18);
+}
 .surface-card.tight { padding: 12px 14px; }
 
-/* Device Hero Section (Apple Continuity / AirDrop Style) */
+/* Device Hero Section (Frosted AirDrop Glass) */
 .hero {
-  background-color: #%(surfaceContainer)s;
-  border-radius: 16px;
-  border: 1px solid alpha(#%(onSurface)s, 0.08);
-  padding: 18px 20px;
+  background-color: alpha(#%(surfaceContainer)s, 0.52);
+  background-image: linear-gradient(145deg, alpha(#ffffff, 0.09), alpha(#ffffff, 0.02));
+  border-radius: 18px;
+  border: 1px solid alpha(#ffffff, 0.13);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.20), 0 8px 24px rgba(0, 0, 0, 0.16);
+  padding: 20px 22px;
 }
 .hero-icon {
   background: linear-gradient(135deg, #%(primary)s, #%(secondary)s);
   color: #ffffff;
   border-radius: 14px;
   min-width: 56px; min-height: 56px;
-  box-shadow: 0 4px 12px alpha(#%(primary)s, 0.30);
+  border: 1px solid alpha(#ffffff, 0.25);
+  box-shadow: 0 4px 14px alpha(#%(primary)s, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
 }
 .hero-icon .material-icon {
   font-size: 32px;
@@ -192,47 +233,61 @@ list.flat row { border-radius: 10px; }
   color: #%(onSurfaceVariant)s;
 }
 
-/* Apple Status Pills */
+/* Apple Status Pills (Translucent Glass Badges) */
 .pill {
   border-radius: 9999px;
-  padding: 3px 10px;
+  padding: 3px 12px;
   background-color: alpha(#%(onSurface)s, 0.08);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.01));
   color: #%(onSurfaceVariant)s;
   font-size: 11px;
   font-weight: 500;
+  border: 1px solid alpha(#ffffff, 0.09);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.10);
 }
 .pill.ok {
-  background-color: alpha(#%(success)s, 0.18);
+  background-color: alpha(#%(success)s, 0.16);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.12), alpha(#ffffff, 0));
+  border-color: alpha(#%(success)s, 0.35);
   color: #%(success)s;
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 2px 6px alpha(#%(success)s, 0.18);
 }
 .pill.warn {
-  background-color: alpha(#%(error)s, 0.18);
+  background-color: alpha(#%(error)s, 0.16);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.12), alpha(#ffffff, 0));
+  border-color: alpha(#%(error)s, 0.35);
   color: #%(error)s;
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 2px 6px alpha(#%(error)s, 0.18);
 }
 
-/* Quick Action Tiles (macOS Control Center Style) */
+/* Quick Action Tiles (Control Center Frosted Acrylic Cards) */
 button.tile {
-  background-color: #%(surfaceContainer)s;
+  background-color: alpha(#%(surfaceContainer)s, 0.50);
+  background-image: linear-gradient(145deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
   color: #%(onSurface)s;
   border-radius: 14px;
-  border: 1px solid alpha(#%(onSurface)s, 0.08);
-  padding: 12px 10px;
-  min-width: 100px;
-  box-shadow: none;
-  transition: all 120ms ease-out;
+  border: 1px solid alpha(#ffffff, 0.11);
+  padding: 10px 14px;
+  min-height: 52px;
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 120ms cubic-bezier(0.2, 0, 0, 1);
 }
 button.tile:hover {
-  background-color: #%(surfaceContainerHigh)s;
-  border-color: alpha(#%(onSurface)s, 0.16);
+  background-color: alpha(#%(surfaceContainerHigh)s, 0.70);
+  background-image: linear-gradient(145deg, alpha(#ffffff, 0.13), alpha(#ffffff, 0.04));
+  border-color: alpha(#ffffff, 0.20);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.22), 0 4px 14px rgba(0, 0, 0, 0.14);
 }
-button.tile:active {
-  background-color: alpha(#%(primary)s, 0.16);
+button.tile:active, button.tile.active {
+  background-color: alpha(#%(primary)s, 0.22);
+  background-image: none;
+  border-color: alpha(#%(primary)s, 0.40);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
 }
-button.tile .body-small {
-  font-size: 11px;
+.tile-title {
+  font-size: 13px;
   font-weight: 500;
   color: #%(onSurface)s;
-  margin-top: 0;
 }
 
 /* Control Center Squircle Badge */
@@ -240,8 +295,10 @@ button.tile .body-small {
   min-width: 36px; min-height: 36px;
   border-radius: 10px;
   background-color: #%(primary)s;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
   color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  border: 1px solid alpha(#ffffff, 0.22);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), inset 0 1px 0 0 rgba(255, 255, 255, 0.32);
 }
 .tile-icon-badge .material-icon {
   color: #ffffff;
@@ -258,47 +315,56 @@ button.tile .body-small {
 .tile-icon-badge.accent-teal .material-icon { color: #1c1c1e; }
 .tile-icon-badge.accent-red { background-color: #FF453A; }
 
-/* Apple Native Buttons */
+/* Apple Native Buttons (Frosted Acrylic Sheen) */
 button.filled, button.suggested-action {
   background-color: #%(primary)s;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
   color: #ffffff;
   border-radius: 8px;
+  border: 1px solid alpha(#ffffff, 0.22);
   padding: 5px 14px;
   min-height: 30px;
   font-weight: 500;
   font-size: 13px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-  transition: background-color 120ms ease-out;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), inset 0 1px 0 0 rgba(255, 255, 255, 0.30);
+  transition: all 120ms ease-out;
 }
 button.filled:hover, button.suggested-action:hover {
-  background-color: alpha(#%(primary)s, 0.88);
+  background-color: alpha(#%(primary)s, 0.90);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
 }
 button.tonal {
   background-color: alpha(#%(onSurface)s, 0.08);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
   color: #%(onSurface)s;
   border-radius: 8px;
   padding: 5px 12px;
   min-height: 30px;
   font-weight: 500;
   font-size: 13px;
-  border: 1px solid alpha(#%(onSurface)s, 0.06);
-  box-shadow: none;
-  transition: background-color 120ms ease-out;
+  border: 1px solid alpha(#ffffff, 0.10);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.10);
+  transition: all 120ms ease-out;
 }
 button.tonal:hover {
   background-color: alpha(#%(onSurface)s, 0.13);
+  border-color: alpha(#ffffff, 0.16);
 }
 button.destructive-action, button.danger {
   background-color: alpha(#%(error)s, 0.16);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0));
   color: #%(error)s;
   border-radius: 8px;
+  border: 1px solid alpha(#%(error)s, 0.25);
   padding: 5px 12px;
   min-height: 30px;
   font-weight: 500;
   font-size: 13px;
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.12);
 }
 button.destructive-action:hover, button.danger:hover {
   background-color: alpha(#%(error)s, 0.25);
+  border-color: alpha(#%(error)s, 0.40);
 }
 button.round {
   border-radius: 9999px;
@@ -306,13 +372,13 @@ button.round {
   padding: 0;
 }
 
-/* Inset Grouped Settings & Preferences (macOS System Settings Style) */
+/* Inset Grouped Settings & Preferences (macOS Frosted Glass Groups) */
 preferencesgroup > box > label.title {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  color: #%(onSurfaceVariant)s;
+  color: alpha(#%(onSurfaceVariant)s, 0.75);
   margin-left: 6px;
   margin-bottom: 8px;
 }
@@ -325,17 +391,18 @@ preferencesgroup > box > label.description {
 }
 
 list.boxed-list, preferencesgroup list.boxed-list {
-  background-color: #%(surfaceContainer)s;
-  border: 1px solid alpha(#%(onSurface)s, 0.10);
+  background-color: alpha(#%(surfaceContainer)s, 0.50);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.06), alpha(#ffffff, 0.02));
+  border: 1px solid alpha(#ffffff, 0.10);
   border-radius: 14px;
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 list.boxed-list > row {
   background-color: transparent;
   border-radius: 0;
   margin: 0;
   border: none;
-  border-bottom: 1px solid alpha(#%(outlineVariant)s, 0.5);
+  border-bottom: 1px solid alpha(#%(outlineVariant)s, 0.25);
   box-shadow: none;
   min-height: 48px;
   padding: 8px 16px;
@@ -345,10 +412,10 @@ list.boxed-list > row:last-child {
   border-bottom: none;
 }
 list.boxed-list > row.activatable:hover {
-  background-color: alpha(#%(onSurface)s, 0.04);
+  background-color: alpha(#ffffff, 0.05);
 }
 list.boxed-list > row.activatable:active {
-  background-color: alpha(#%(onSurface)s, 0.08);
+  background-color: alpha(#ffffff, 0.09);
 }
 list.boxed-list > row separator, list.boxed-list > separator {
   opacity: 0; min-height: 0;
@@ -359,9 +426,10 @@ list.boxed-list > row.plugin-options-row:selected {
   background-color: transparent; padding: 0; margin: 0; border: none; min-height: 0;
 }
 list.boxed-list.plugin-options {
-  background-color: #%(surfaceContainerLow)s;
+  background-color: alpha(#%(surfaceContainerLow)s, 0.60);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.04), alpha(#ffffff, 0.01));
   border-radius: 10px;
-  border: 1px solid alpha(#%(onSurface)s, 0.06);
+  border: 1px solid alpha(#ffffff, 0.07);
 }
 list.boxed-list.plugin-options > row {
   background-color: transparent;
@@ -370,18 +438,20 @@ list.boxed-list.plugin-options > row {
 row.c-row .title { font-size: 13px; font-weight: 500; }
 .c-value { font-size: 12px; color: #%(onSurfaceVariant)s; }
 
-row.expander list.nested { background-color: #%(surfaceContainerLow)s; }
+row.expander list.nested { background-color: alpha(#%(surfaceContainerLow)s, 0.60); }
 button.expand-arrow { min-width: 28px; min-height: 28px; margin-right: 2px; }
 button.expand-arrow .material-icon { transition: transform 200ms cubic-bezier(0.2, 0, 0, 1); }
 button.expand-arrow.expanded .material-icon { transform: rotate(180deg); }
 
-/* Apple Segmented Control (View Switcher) */
+/* Apple Segmented Control (Frosted Acrylic Capsule) */
 viewswitcher, .view-switcher {
-  background-color: alpha(#%(onSurface)s, 0.08);
+  background-color: alpha(#000000, 0.22);
+  background-image: linear-gradient(180deg, alpha(#000000, 0.12), alpha(#000000, 0.04));
   border-radius: 10px;
   padding: 3px;
   margin: 3px 0;
-  border: 1px solid alpha(#%(onSurface)s, 0.05);
+  border: 1px solid alpha(#ffffff, 0.07);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
 }
 viewswitcher button, .view-switcher button {
   border-radius: 7px;
@@ -389,34 +459,38 @@ viewswitcher button, .view-switcher button {
   min-height: 28px;
   font-size: 13px;
   font-weight: 500;
-  color: #%(onSurfaceVariant)s;
+  color: alpha(#%(onSurface)s, 0.72);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   box-shadow: none;
   transition: all 120ms ease-out;
 }
 viewswitcher button:hover, .view-switcher button:hover {
   color: #%(onSurface)s;
-  background-color: alpha(#%(onSurface)s, 0.04);
+  background-color: alpha(#ffffff, 0.06);
 }
 viewswitcher button:checked, .view-switcher button:checked {
-  background-color: alpha(#ffffff, 0.20);
+  background-color: alpha(#ffffff, 0.18);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.14), alpha(#ffffff, 0.03));
   color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  border: 1px solid alpha(#ffffff, 0.18);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22), inset 0 1px 0 0 alpha(#ffffff, 0.22);
 }
 
-/* Apple Music Now Playing Card */
+/* Apple Music Now Playing Card (Frosted Glass Plate) */
 .media-card {
   padding: 20px;
   border-radius: 16px;
-  background-color: #%(surfaceContainer)s;
-  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  background-color: alpha(#%(surfaceContainer)s, 0.52);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
+  border: 1px solid alpha(#ffffff, 0.12);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 6px 20px rgba(0, 0, 0, 0.12);
 }
 .media-art {
   border-radius: 14px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30), inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  border: 1px solid alpha(#ffffff, 0.12);
   background-color: #%(surfaceContainerHighest)s;
 }
 scale.media trough {
@@ -479,8 +553,8 @@ dropdown.player-pill > button {
 }
 entry.composer, .composer {
   border-radius: 20px;
-  background-color: #%(surfaceContainer)s;
-  border: 1px solid #%(outlineVariant)s;
+  background-color: alpha(#%(surfaceContainer)s, 0.60);
+  border: 1px solid alpha(#ffffff, 0.12);
   padding: 5px 14px;
   min-height: 36px;
   font-size: 13px;
@@ -488,12 +562,16 @@ entry.composer, .composer {
 
 /* Magic Trackpad (Touchpad) */
 .touchpad {
-  background-color: #%(surfaceContainer)s;
+  background-color: alpha(#%(surfaceContainer)s, 0.50);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.06), alpha(#ffffff, 0.02));
   border-radius: 16px;
-  border: 1px solid alpha(#%(onSurface)s, 0.08);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid alpha(#ffffff, 0.10);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15), inset 0 1px 0 0 alpha(#ffffff, 0.10);
 }
-.touchpad.active { border-color: #%(primary)s; }
+.touchpad.active {
+  border-color: #%(primary)s;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.20), 0 0 12px alpha(#%(primary)s, 0.25);
+}
 
 /* Verification Key */
 .verification-key {

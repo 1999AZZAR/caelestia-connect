@@ -51,10 +51,10 @@ class Overview(Gtk.ScrolledWindow):
 
         self.tiles = Gtk.FlowBox(
             selection_mode=Gtk.SelectionMode.NONE,
-            max_children_per_line=4,
+            max_children_per_line=3,
             min_children_per_line=2,
             column_spacing=12,
-            row_spacing=12,
+            row_spacing=10,
             homogeneous=True,
         )
         self.box.append(self.tiles)
@@ -173,7 +173,7 @@ class Overview(Gtk.ScrolledWindow):
         self.box.set_margin_start(14 if compact else 20)
         self.box.set_margin_end(14 if compact else 20)
         self.box.set_spacing(16 if compact else 20)
-        self.tiles.set_max_children_per_line(2 if compact else 4)
+        self.tiles.set_max_children_per_line(2 if compact else 3)
         if hasattr(self, "media_card"):
             self.media_card.set_compact(compact)
 
