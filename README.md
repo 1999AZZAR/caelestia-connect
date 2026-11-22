@@ -1,8 +1,8 @@
 # Caelestia Connect
 
-**A bloat-free, standalone KDE Connect client for modern Linux desktops (KDE Plasma, GNOME, Hyprland, Sway, Waybar, and Caelestia Shell).**
+A standalone KDE Connect client written from scratch in Python and GTK4 / Libadwaita. It communicates with the official KDE Connect Android app and requires no KDE or Qt runtime libraries.
 
-Built in Python, GTK4, and Libadwaita. Zero Qt or KDE library runtime dependencies. High-performance low-latency screen mirroring and virtual webcam powered by [scrcpy](https://github.com/Genymobile/scrcpy).
+Originally created for the [Caelestia shell](https://github.com/caelestia-dots/shell), this fork adapts Caelestia Connect for standalone use across Linux desktop environments (KDE Plasma, GNOME, Hyprland, Sway, and Waybar) with native file manager integration, connection stability improvements, and expanded screen mirroring controls.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -12,73 +12,47 @@ Built in Python, GTK4, and Libadwaita. Zero Qt or KDE library runtime dependenci
 | **Remote input** | |
 | ![Remote input](docs/screenshots/remote.png) | |
 
----
+## Fork improvements
 
-## Why This Fork?
-
-While originally conceived for the Caelestia quickshell, this fork transforms Caelestia Connect into a **universal, lightweight, standalone KDE Connect desktop client** that fits seamlessly into any Linux environment:
-
-- ⚡ **Zero Bloat & Ultra-Lightweight (~60 MB RAM):** Official `kdeconnectd` pulls in hundreds of megabytes of heavy Qt6 and KDE Frameworks runtime libraries. Caelestia Connect is pure Python + GTK4 / Libadwaita, idling at a feather-light ~59 MB memory footprint.
-- 🛡️ **Resolved 21 GB Memory Leak & Connection Storms:** Fixed an upstream architectural flaw where unclosed `Gio.TlsClientConnection` streams and self-interface loopbacks caused the background daemon to balloon to 21 GB. Added proper TLS lifecycle teardown, self-address link loop prevention, and exponential reconnect backoff.
-- 🖥️ **Universal Desktop Integration:**
-  - **KDE Plasma:** Native Dolphin file manager right-click sharing via KIO Service Menu (`caelestia-share`) with automatic device detection and `kdialog` multi-device selection picker. Full StatusNotifierItem (SNI) system tray.
-  - **GNOME:** Native Libadwaita dark/light styling, Nautilus file manager Python extension, and AppIndicator/SNI tray.
-  - **Wayland Compositors (Hyprland, Sway, River, Niri):** Works seamlessly with Waybar, clipboard synchronization (`wl-clipboard`), and keyboard/mouse pointer edge sharing (`uinput`).
-  - **Caelestia Shell:** Preserved and refined Quickshell QML status bar integration.
-- 📱 **Pro-Grade Screen Mirroring (`scrcpy`):**
-  - **Dynamic Phone Display Power Toggle:** Turn the physical phone screen on or off while mirroring without freezing video or disabling touchscreen/mouse input (`SurfaceControl` reflection + `--stay-awake`).
-  - **Granular Settings:** Customizable max resolution (unrestricted, 1440p, 1080p, 720p), framerate (up to 120 FPS), video bitrates (4–32 Mbps), virtual display mode, and audio forwarding toggles with automatic Bluetooth media audio coordination.
-  - **Custom User Flags:** Seamlessly inject custom scrcpy arguments alongside defaults.
-  - **In-App Shortcuts:** Clear UI hints for hotkeys (`Alt+O` to toggle phone screen, `Alt+Shift+O` to wake screen, `Ctrl+F` for fullscreen).
-- 🌐 **Multi-Network & Tailscale Continuity:** Smart link deduplication prevents connection storms and duplicate handshakes when devices are reachable across both local Wi-Fi and Tailscale / VPN interfaces.
-- 🔤 **Bundled Standalone Typography:** Automatically bundles and installs `Google Sans Flex` and `Material Symbols Rounded`, guaranteeing sharp fonts and icons on any distribution out-of-the-box.
-
----
+- **Memory and connection stability:** Resolves an upstream issue where unclosed `Gio.TlsClientConnection` streams and reconnect loops against local interface addresses caused background memory to grow over time. The daemon now filters out own-host addresses, explicitly closes failed TLS streams, and applies exponential reconnect backoff (0.5s to 60s). Idle memory stays around 50 MB.
+- **Multi-network deduplication:** If a paired phone is reachable over both local Wi-Fi and a VPN interface (such as Tailscale), the daemon keeps a single active link rather than initiating competing handshakes.
+- **Dolphin file manager integration:** Installs a Dolphin KIO service menu ("Share via Celestia…") using `caelestia-share`. When multiple paired devices are reachable, it prompts with a `kdialog` selection list; with a single device, it sends immediately.
+- **Screen mirroring controls (scrcpy):**
+  - Toggle the physical phone screen off and on (`Alt+O` / `Alt+Shift+O`) while keeping mouse, keyboard, and touch controls active.
+  - Configurable resolution limits, frame rate presets (up to 120 fps), video bit rates (4–32 Mbps), virtual display mode, and audio forwarding toggles.
+  - Support for passing custom scrcpy arguments.
+- **Desktop integration:** Includes a StatusNotifierItem (SNI) D-Bus tray implementation for KDE Plasma, GNOME (via AppIndicator), and Waybar, and installs bundled `Google Sans Flex` and `Material Symbols Rounded` fonts into `~/.local/share/fonts/caelestia`.
 
 ## Features
 
-### 📡 Connectivity & Discovery
-- Automatic discovery over UDP broadcast and mDNS.
-- Encrypted TLS connections over Wi-Fi, Ethernet, and Bluetooth RFCOMM.
-- Secure pairing with verification keys.
-- Multi-address deduplication (simultaneous LAN and Tailscale links handled cleanly).
-
-### 🔔 Notifications & Calls
-- Bi-directional notification forwarding with quick actions, inline replies, and dismiss sync.
-- Forward desktop notifications to your phone.
-- Incoming call alerts, call muting, and automatic desktop media pausing during calls.
-- Full SMS and MMS conversation history with contact names and direct replies.
-
-### 📁 File Sharing & Clipboard
-- Bi-directional file, folder, link, and text transfer.
-- **KDE Dolphin Integration:** Right-click any file → *"Share via Celestia…"*.
-- **GNOME Nautilus Integration:** Right-click context menu via python extension.
-- Bidirectional clipboard synchronization (`wl-clipboard`).
-
-### 🎵 Media & Audio
-- Bi-directional MPRIS control: control your desktop media players from the phone, or control phone media players from your desktop media widgets.
-- Ring phone / Find my phone (and let the phone ring your PC).
-- PipeWire Bluetooth audio routing: switch phone sound output between phone speakers and PC audio seamlessly.
-
-### 🖱️ Remote Control & Input
-- Use your phone as a high-precision touchpad and keyboard.
-- **Edge Sharing (Mouse & Keyboard):** Move your desktop mouse pointer past any designated screen edge to control your phone directly (`uinput`).
-- Remote command execution (trigger pre-configured scripts/commands on the PC from your phone).
-- Presentation remote, volume controls, and drawing tablet mode.
-
-### 📺 Screen Mirroring & Virtual Camera
-- Ultra-low latency phone display mirroring with mouse and keyboard input.
-- Real-time phone screen off/on control (`Alt+O`) while maintaining active desktop control.
-- High-quality phone camera preview that rotates automatically with device orientation.
-- **Virtual Webcam (`v4l2loopback`):** Turn your phone camera into a crisp Linux webcam for Google Meet, Zoom, OBS, and browsers under the device name `Caelestia Phone Camera`.
-
----
+- Discovery over UDP broadcast and mDNS, with encrypted TLS connections over Wi-Fi, Ethernet, or Bluetooth RFCOMM
+- Pairing with verification key
+- Battery and cellular signal status
+- Bi-directional notification sync with actions, inline replies, and dismissal
+- Send files, folders, links, and text in both directions
+- Shared clipboard via `wl-clipboard`
+- Bi-directional MPRIS media controls
+- SMS and MMS conversation history with contact names and direct replies
+- Incoming call notifications, muting, and media pause during calls
+- Ring device (ring phone from computer, or ring computer from phone)
+- Bluetooth audio output routing via PipeWire
+- Phone as touchpad and keyboard, and remote control for the phone
+- Mouse and keyboard edge sharing past screen borders (`uinput`)
+- Remote command execution
+- Screen mirroring and phone camera preview via `scrcpy`
+- Virtual webcam via `v4l2loopback` (`Caelestia Phone Camera`)
+- Browse phone storage via SFTP / SSHFS
+- Virtual monitor between computers
+- File manager sharing for KDE Dolphin and GNOME Files (Nautilus)
+- StatusNotifierItem tray icon for KDE Plasma, GNOME, and Waybar
+- Status bar widget for Caelestia shell
 
 ## Installation
 
-### 1. Install Dependencies
+### Dependencies
 
-#### Debian / Ubuntu / Linux Mint
+On Debian / Ubuntu:
+
 ```sh
 sudo apt update
 sudo apt install -y \
@@ -86,17 +60,19 @@ sudo apt install -y \
   wl-clipboard pulseaudio-utils sshfs scrcpy adb kdialog
 ```
 
-#### Arch Linux / EndeavourOS / Manjaro
+On Arch Linux:
+
 ```sh
 sudo pacman -S --needed \
   python-gobject libadwaita python-cryptography python-evdev \
-  wl-clipboard libpulse sshfs gtk4-layer-shell \
-  scrcpy android-tools android-udev kdialog
+  wl-clipboard libpulse sshfs scrcpy android-tools android-udev kdialog
 ```
 
-*(Optional for virtual display extending between computers: `wayvnc` / `freerdp`)*
+Optional dependencies:
+- Virtual monitor between computers: `wayvnc` (host) and `freerdp` (client).
+- Presentation pointer overlay: `gtk4-layer-shell`.
 
-### 2. Clone & Run the Installer
+### Install
 
 ```sh
 git clone https://github.com/1999AZZAR/caelestia-connect.git
@@ -104,51 +80,60 @@ cd caelestia-connect
 ./install.sh
 ```
 
-The installer will:
-1. Validate required and optional system dependencies.
-2. Install launcher scripts into `~/.local/bin` (`caelestia-connect`, `caelestia-connectd`, `caelestia-connect-cli`, `caelestia-share`).
-3. Install bundled fonts (`Google Sans Flex` and `Material Symbols Rounded`) into `~/.local/share/fonts/caelestia`.
-4. Install the desktop entry, application icon, Dolphin KIO service menu, and Nautilus extension.
-5. Enable and start the systemd user service `caelestia-connectd.service`.
-6. (Optional) Integrate with Caelestia Quickshell if present (pass `--no-shell` to skip).
+`install.sh` handles setup for the current user:
+1. Installs `caelestia-connect`, `caelestia-connectd`, `caelestia-connect-cli`, and `caelestia-share` into `~/.local/bin`.
+2. Installs the desktop launcher, application icon, Dolphin KIO service menu, and Nautilus Python extension.
+3. Copies bundled fonts to `~/.local/share/fonts/caelestia` and refreshes the font cache.
+4. Enables and starts the `caelestia-connectd.service` user unit.
+5. If Caelestia shell is present, patches status icons and bar popouts (use `--no-shell` to skip).
 
-### 3. Open Firewall Ports
-KDE Connect protocol requires ports `1714:1764` for UDP and TCP:
+To uninstall:
+```sh
+./install.sh --uninstall
+```
+Pairing data and configuration in `~/.config/caelestia-connect` are retained.
+
+### Firewall
+
+KDE Connect discovery and data transfer use UDP and TCP ports `1714` to `1764`:
+
 ```sh
 sudo ufw allow 1714:1764/udp && sudo ufw allow 1714:1764/tcp
 ```
-*(Or the equivalent for `firewalld`: `sudo firewall-cmd --permanent --zone=home --add-service=kdeconnect && sudo firewall-cmd --reload`)*
 
-### 4. Input Sharing Setup (`uinput`)
-To allow remote controlling this PC from your phone, ensure `/dev/uinput` is accessible:
+### Remote input permissions (`uinput`)
+
+Controlling the computer's mouse and keyboard from the phone requires write access to `/dev/uinput`:
+
 ```sh
 echo 'KERNEL=="uinput", GROUP="input", MODE="0660", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/60-uinput.rules
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
----
+## Screen mirroring and phone camera
 
-## Screen Mirroring & Webcam Setup
+Screen mirroring and the camera preview run via [scrcpy](https://github.com/Genymobile/scrcpy) over Android debugging (ADB):
 
-### Pairing scrcpy with Android
-Screen mirroring and the camera preview operate via Android debugging (ADB):
-- **USB:** Turn on *USB debugging* in Developer Options on your phone, connect via USB, and accept the debugging prompt.
-- **Wireless ADB:** Turn on *Wireless debugging* on your phone and pair once via `adb pair <ip>:<port>`. Caelestia Connect will automatically match the device by IP or hostname.
+- **USB:** Enable *USB debugging* in Developer Options on the phone, plug in a USB cable, and approve the host prompt.
+- **Wi-Fi:** Enable *Wireless debugging* on the phone and pair once with `adb pair <ip>:<port>`. The daemon matches connected ADB devices by IP address or device name.
 
-### Mirroring Controls & Shortcuts
-Inside the mirroring window:
-- `Alt + O` — Toggle phone physical screen off / on (display stays dark, mouse/touch controls remain fully active).
-- `Alt + Shift + O` — Turn phone physical screen back on.
-- `Ctrl + F` — Toggle fullscreen.
-- `Ctrl + G` — Resize window to 1:1 pixel scale.
-- `Ctrl + H` — Emulate Home button.
-- `Ctrl + B` — Emulate Back button.
-- `Ctrl + S` — Emulate App Switcher.
+### Mirroring controls
 
-All mirroring settings (Resolution limit, Max FPS, Bitrate, Audio forwarding, Virtual display mode, and custom flags) can be configured directly inside the GTK4 application under **Device Settings → Screen Mirroring (scrcpy)**.
+While mirroring:
+- `Alt + O`: Toggle the phone screen off or on. The phone display goes dark to save power and reduce heat, while mouse, keyboard, and touchscreen input from the computer continue to work.
+- `Alt + Shift + O`: Turn the phone screen back on.
+- `Ctrl + F`: Fullscreen toggle.
+- `Ctrl + G`: Resize window to 1:1 pixel scale.
+- `Ctrl + H`: Home button.
+- `Ctrl + B`: Back button.
+- `Ctrl + S`: App switcher.
 
-### Virtual Webcam (`v4l2loopback`)
-To use your phone's camera as a system webcam:
+Settings under **Device Settings → Screen Mirroring (scrcpy)** configure resolution limits, maximum frame rates (30 to 120 fps), video bit rates (4 to 32 Mbps), audio forwarding, virtual display mode, and custom flags.
+
+### Virtual webcam setup
+
+To use the phone camera as a system webcam in browsers, OBS, or video call apps:
+
 ```sh
 # On Arch Linux:
 sudo pacman -S --needed v4l2loopback-dkms linux-headers ffmpeg v4l-utils
@@ -158,127 +143,78 @@ sudo pacman -S --needed v4l2loopback-dkms linux-headers ffmpeg v4l-utils
 sudo apt install -y v4l2loopback-dkms linux-headers-generic ffmpeg v4l-utils
 ./install.sh --webcam
 ```
-This automatically configures the loopback device `Caelestia Phone Camera`. The camera activates automatically when an application (browser, Zoom, OBS) requests the video stream and turns off when closed.
 
----
+This sets up a loopback device named `Caelestia Phone Camera`. The camera starts streaming when an application opens the video device and stops when the application closes it.
 
-## File Manager Sharing
+## File sharing
 
-### KDE Dolphin
-Right-click any file or collection of files in Dolphin:
-- Select **Share via Celestia…**
-- If only one paired device is online, the transfer begins immediately with a desktop notification.
-- If multiple devices are available, a clean `kdialog` dialog lets you choose the target device.
+- **KDE Dolphin:** Right-click any selection of files and choose **Share via Celestia…**. If one paired device is online, files are sent immediately. If multiple devices are available, a `kdialog` prompt asks which device to send to.
+- **GNOME Files (Nautilus):** Right-click files and select **Send via Caelestia Connect**.
 
-### GNOME Files (Nautilus)
-Right-click files in Nautilus and select **Send via Caelestia Connect**.
+## Command line interface (CLI)
 
----
-
-## Command Line Interface (CLI)
-
-`caelestia-connect-cli` provides instant terminal control for scripting, keybindings, and automation:
+`caelestia-connect-cli` communicates with the background daemon over its local IPC socket:
 
 ```sh
-# List paired devices and connection statuses
 caelestia-connect-cli list
-
-# Send a ping notification to all reachable devices
-caelestia-connect-cli ping "Hello from terminal"
-
-# Send files or links
-caelestia-connect-cli share photo.jpg document.pdf https://github.com
-
-# Push current desktop clipboard to phone
+caelestia-connect-cli ping "hello"
+caelestia-connect-cli share photo.jpg https://example.com
 caelestia-connect-cli send-clipboard
-
-# Send an SMS
-caelestia-connect-cli sms +15551234567 "Hello from Caelestia Connect"
-
-# Media playback controls
+caelestia-connect-cli sms +15551234567 "message"
 caelestia-connect-cli media PlayPause
-caelestia-connect-cli media Next
-
-# Ring phone to locate it
 caelestia-connect-cli ring
-
-# Low-level plugin invocation
 caelestia-connect-cli call <plugin> <action> '<json args>'
-
-# Watch live IPC event stream
 caelestia-connect-cli watch
 ```
 
----
-
-## Project Structure
+## Architecture
 
 ```
 caelestia_connect/
-  daemon.py, api.py       # Core background service & JSON-RPC over UNIX socket
-  lan.py                  # Discovery, TLS links, reconnect backoff, & payload transfers
-  mdns.py                 # ZeroConf / mDNS responder and browser
-  bluetooth.py            # BlueZ RFCOMM multiplexed transport
-  device.py               # Pairing logic and plugin packet router
-  desktop/                # Desktop integrations (tray, notifications, audio, MPRIS, uinput, webcam)
-    tray.py               # Standalone StatusNotifierItem (SNI) D-Bus implementation
-    android.py            # scrcpy process management, camera, & display control
-  plugins/                # Modular plugin architecture (share, mpris, sftp, sms, etc.)
-  ui/                     # GTK4 + Libadwaita responsive desktop interface
-    device_settings.py    # Per-device settings with scrcpy configuration suite
-    mirroring.py          # scrcpy launcher with display power management
-  cli.py                  # caelestia-connect-cli implementation
+  daemon.py, api.py     Background service and JSON-RPC IPC over UNIX domain socket
+  lan.py                Network discovery, TLS links, link deduplication, and backoff
+  mdns.py               mDNS responder and browser
+  bluetooth.py          BlueZ RFCOMM links with KDE Connect packet multiplexing
+  device.py             Pairing state, packet dispatch, and plugin routing
+  desktop/              System integrations (tray, notifications, audio, MPRIS, uinput, webcam)
+    tray.py             StatusNotifierItem (SNI) D-Bus implementation
+    android.py          scrcpy process management, display power, and camera loopback
+  plugins/              Plugin implementations (share, mpris, sftp, sms, etc.)
+  ui/                   GTK4 / Libadwaita client application
+    device_settings.py  Per-device configuration and scrcpy mirroring settings
+    mirroring.py        scrcpy launcher and session handling
+  cli.py                CLI client
 data/
-  kio/                    # Dolphin KIO Service Menu and helper (caelestia-share)
-  nautilus/               # GNOME Nautilus Python extension
-  caelestia-connectd.service # Systemd user service unit
-tests/                    # Pytest test suite with fake Android peer & reconnect simulations
+  kio/                  Dolphin KIO service menu and caelestia-share helper
+  nautilus/             Nautilus Python extension
+  caelestia-connectd.service  Systemd user service unit
+tests/                  Automated test suite with fake peer and network simulations
 ```
 
----
-
-## Testing & Quality Assurance
-
-All core functionality is covered by automated unit and integration tests:
+## Testing
 
 ```sh
-# Run full test suite with pytest
 python3 -m pytest tests/
 
-# Test specific subsystems
-python3 -m pytest tests/test_lan_reconnect.py   # TLS lifecycle, loopback refusal, backoff
-python3 -m pytest tests/test_android.py         # scrcpy argument formatting & controls
-python3 -m pytest tests/test_bluetooth.py       # BlueZ packet multiplexing
+# Test specific components
+python3 -m pytest tests/test_lan_reconnect.py
+python3 -m pytest tests/test_android.py
 
-# Linting and formatting
+# Linting
 ruff check .
 ruff format --check .
 
-# Run demo mode (emulates phone peer without real device)
+# Run demo mode (simulates a connected phone without hardware)
 python3 tests/demo.py
 ```
 
----
+## Credits
 
-## Uninstall
-
-To cleanly remove launchers, services, and desktop integrations:
-```sh
-./install.sh --uninstall
-```
-*(Your pairing keys and configurations in `~/.config/caelestia-connect` are preserved).*
-
----
-
-## Credits & Acknowledgements
-
-- **Upstream:** [maylton/caelestia-connect](https://github.com/maylton/caelestia-connect) for the initial GTK4 client and daemon architecture.
-- **Screen Mirroring & Webcam:** [ProSahil (@KingSahil)](https://github.com/KingSahil) for initial scrcpy mirroring foundation.
-- **Protocol & Ecosystem:** [KDE Connect](https://invent.kde.org/network/kdeconnect-kde) team for the protocol specification.
-- **Streaming Engine:** [Romain Vimont (@rom1v)](https://github.com/rom1v) and contributors for [scrcpy](https://github.com/Genymobile/scrcpy).
-- **Fork Enhancements:** [1999AZZAR](https://github.com/1999AZZAR) — memory leak elimination, Dolphin KIO share integration, multi-interface deduplication, stay-awake screen power controls, granular scrcpy suite, and standalone desktop refinements.
-
----
+- [maylton/caelestia-connect](https://github.com/maylton/caelestia-connect): Original client and daemon implementation.
+- [ProSahil (@KingSahil)](https://github.com/KingSahil): Initial scrcpy screen mirroring and phone camera integration.
+- [KDE Connect](https://invent.kde.org/network/kdeconnect-kde): Protocol specification and ecosystem.
+- [scrcpy](https://github.com/Genymobile/scrcpy): Android screen mirroring and video streaming.
+- Fork maintenance and enhancements by [1999AZZAR](https://github.com/1999AZZAR).
 
 ## License
 
