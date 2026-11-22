@@ -1,7 +1,7 @@
 [project]
 name = "caelestia-connect"
 version = "1.2.0"
-description = "KDE Connect compatible daemon and GTK4 client for the Caelestia shell"
+description = "Lightweight, bloat-free KDE Connect compatible daemon and GTK4 client for modern Linux desktops"
 readme = "README.md"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.12"

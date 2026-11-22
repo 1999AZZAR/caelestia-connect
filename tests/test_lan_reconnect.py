@@ -59,7 +59,7 @@ def attempt(p, clock, host="192.168.1.50", device_id=PHONE_ID, port=1716, force=
     def fake_spawn(coro, name=None):
         spawned.append(name)
         coro.close()
-        return None
+        return
 
     p.local_addresses = {"127.0.0.1", "::1", "192.168.1.10"}
     with mock.patch.object(lan.time, "monotonic", clock.monotonic), mock.patch.object(lan, "spawn", fake_spawn):

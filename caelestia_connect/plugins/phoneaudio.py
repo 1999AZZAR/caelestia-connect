@@ -7,6 +7,7 @@ from gi.repository import GLib
 
 from ..desktop.phoneaudio import BluezAudio, PhoneAudio
 from ..i18n import _
+from ..utils import spawn
 from .base import Plugin, action
 
 # Android pauses the music when its Bluetooth output goes away; give it time to do so before resuming
