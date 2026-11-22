@@ -88,15 +88,40 @@ def text_button(text: str, icon: str | None = None, css: list[str] | None = None
     return b
 
 
+TILE_COLORS = {
+    "notifications_active": "accent-blue",
+    "ring_volume": "accent-orange",
+    "upload_file": "accent-green",
+    "link": "accent-teal",
+    "content_paste_go": "accent-yellow",
+    "folder_open": "accent-indigo",
+    "mouse": "accent-purple",
+    "screen_share": "accent-blue",
+    "stop_screen_share": "accent-red",
+    "screen_lock_portrait": "accent-orange",
+    "mobile_lock_portrait": "accent-blue",
+    "photo_camera": "accent-teal",
+    "no_photography": "accent-red",
+    "sms": "accent-green",
+    "lock": "accent-red",
+    "lock_open": "accent-green",
+}
+
+
 class Tile(Gtk.Button):
-    """Quick action tile: big icon over a short label."""
+    """Quick action tile: Apple squircle badge icon over a short label."""
 
     def __init__(self, icon: str, text: str, callback=None) -> None:
         super().__init__()
         self.add_css_class("tile")
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.icon = Icon(icon, "large")
-        box.append(self.icon)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
+        badge = Gtk.CenterBox(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        badge.add_css_class("tile-icon-badge")
+        color_class = TILE_COLORS.get(icon, "accent-blue")
+        badge.add_css_class(color_class)
+        self.icon = Icon(icon, "medium")
+        badge.set_center_widget(self.icon)
+        box.append(badge)
         self.text = label(text, xalign=0.5, ellipsize=True, css=["body-small"])
         box.append(self.text)
         self.set_child(box)

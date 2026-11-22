@@ -227,12 +227,12 @@ class Slider(Gtk.DrawingArea):
 
 
 class Switch(Gtk.DrawingArea):
-    """Apple HIG switch: capsule track, pure white round knob with subtle drop shadow."""
+    """Apple HIG switch: capsule track, pure white round knob with subtle dual drop shadow."""
 
     __gtype_name__ = "CaelestiaSwitch"
 
-    WIDTH = 46
-    HEIGHT = 26
+    WIDTH = 44
+    HEIGHT = 24
 
     def __init__(self, theme, active: bool = False) -> None:
         super().__init__(
@@ -359,6 +359,19 @@ class Switch(Gtk.DrawingArea):
         cr.set_source_rgba(*mix(on_track, off_track))
         cr.fill()
 
+        # Faint 1px hairline border on inactive track
+        if t < 0.95:
+            cr.set_line_width(1.0)
+            b_alpha = (1.0 - t) * (0.08 if th.mode == "dark" else 0.15)
+            if th.mode == "dark":
+                cr.set_source_rgba(1.0, 1.0, 1.0, b_alpha)
+            else:
+                cr.set_source_rgba(0.0, 0.0, 0.0, b_alpha)
+            _rounded_rect(
+                cr, x0 + 0.5, y0 + 0.5, self.WIDTH - 1.0, self.HEIGHT - 1.0, *((self.HEIGHT - 1.0) / 2,) * 4
+            )
+            cr.stroke()
+
         pad = 2.0
         th_h = self.HEIGHT - 4.0
         th_w = th_h * (1 + 0.15 * self._stretch)
@@ -366,8 +379,12 @@ class Switch(Gtk.DrawingArea):
         ty = y0 + (self.HEIGHT - th_h) / 2
 
         if enabled:
+            # Dual-layer soft contact shadow
+            cr.set_source_rgba(0, 0, 0, 0.14)
+            _rounded_rect(cr, tx, ty + 1.8, th_w, th_h, *(th_h / 2,) * 4)
+            cr.fill()
             cr.set_source_rgba(0, 0, 0, 0.22)
-            _rounded_rect(cr, tx, ty + 1.0, th_w, th_h, *(th_h / 2,) * 4)
+            _rounded_rect(cr, tx, ty + 0.8, th_w, th_h, *(th_h / 2,) * 4)
             cr.fill()
 
         cr.set_source_rgba(*thumb_color)

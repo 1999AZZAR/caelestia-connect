@@ -121,7 +121,11 @@ class Overview(Gtk.ScrolledWindow):
                 )
             else:
                 tiles.append(
-                    ("screen_share", _("Mirror screen"), lambda: mirroring.show(self.app, self.page.window, self.device))
+                    (
+                        "screen_share",
+                        _("Mirror screen"),
+                        lambda: mirroring.show(self.app, self.page.window, self.device),
+                    )
                 )
             if android.get("preview"):
                 tiles.append(("no_photography", _("Stop camera"), self._act("android", "stop_camera")))

@@ -74,7 +74,9 @@ class DeviceSettings(Adw.PreferencesPage):
                 else:
                     is_mirroring = android_state.get("mirroring", False)
                 if is_mirroring:
-                    action_row = Adw.ButtonRow(title=_("Stop mirroring"), start_icon_name="media-playback-stop-symbolic")
+                    action_row = Adw.ButtonRow(
+                        title=_("Stop mirroring"), start_icon_name="media-playback-stop-symbolic"
+                    )
                     action_row.add_css_class("destructive-action")
                     action_row.connect("activated", lambda *_: self.app.plugin(dev, "android", "stop_mirror"))
                     scrcpy_group.add(action_row)
@@ -87,7 +89,9 @@ class DeviceSettings(Adw.PreferencesPage):
                     screen_row.connect("activated", lambda *_: self.app.plugin(dev, "android", "toggle_screen"))
                     scrcpy_group.add(screen_row)
                 else:
-                    action_row = Adw.ButtonRow(title=_("Start mirroring"), start_icon_name="media-playback-start-symbolic")
+                    action_row = Adw.ButtonRow(
+                        title=_("Start mirroring"), start_icon_name="media-playback-start-symbolic"
+                    )
                     action_row.add_css_class("suggested-action")
                     from . import mirroring
                     action_row.connect("activated", lambda *_: mirroring.show(self.app, self.page.window, self.device))

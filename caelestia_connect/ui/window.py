@@ -130,10 +130,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.add_action(act)
         tv.add_top_bar(hb)
 
-        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=4, margin_bottom=12)
-        me = Gtk.Box(spacing=12, margin_start=16, margin_end=16)
-        me.add_css_class("surface-card")
-        ic = w.Icon("desktop_windows", "medium", filled=True)
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=4, margin_bottom=12)
+        me = Gtk.Box(spacing=12, margin_start=10, margin_end=10, margin_bottom=4)
+        me.add_css_class("host-card")
+        ic = w.Icon("laptop", "medium", filled=True)
         av = w.circle(ic)
         av.add_css_class("connected")
         self.self_icon = ic
@@ -148,7 +148,8 @@ class MainWindow(Adw.ApplicationWindow):
         body.append(me)
 
         devices_title = w.section_title(_("Devices"))
-        devices_title.set_margin_start(24)
+        devices_title.set_margin_start(16)
+        devices_title.set_margin_top(4)
         body.append(devices_title)
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.list.add_css_class("navigation-sidebar")

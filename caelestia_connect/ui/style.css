@@ -1,7 +1,6 @@
-/* Caelestia Connect stylesheet.
-   Apple Human Interface Guidelines (macOS Sonoma / Sequoia) design language.
-   Clean desktop hierarchy: inset grouped lists, squircle controls, refined typography,
-   and authentic Apple system colors with zero external bloat. */
+/* Caelestia Connect - Apple Human Interface Guidelines (macOS Sonoma / Sequoia)
+   Refined first-party desktop aesthetics: Inset Grouped sections, Control Center squircle tiles,
+   macOS sidebar source lists, segmented control navigation, and authentic Apple typography. */
 
 :root {
   --accent-bg-color: #%(primary)s;
@@ -45,6 +44,7 @@ window, .background {
   -gtk-font-smoothing: antialiased;
 }
 
+/* macOS Window Frame */
 window.caelestia {
   background-color: alpha(#%(background)s, 0.98);
   color: #%(onSurface)s;
@@ -52,7 +52,7 @@ window.caelestia {
   border: 1px solid alpha(#%(onSurface)s, 0.08);
 }
 
-/* Material Symbols icon fonts with Apple proportions */
+/* Iconography with Apple System proportions */
 .material-icon {
   font-family: "%(icon)s";
   font-feature-settings: "liga";
@@ -64,13 +64,13 @@ window.caelestia {
 .icon-small { font-size: 16px; }
 .icon-medium { font-size: 20px; }
 .icon-large { font-size: 24px; }
-.icon-huge { font-size: 52px; }
+.icon-huge { font-size: 48px; }
 
-/* Apple SF Typography scale */
-.headline { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
-.title-large { font-size: 18px; font-weight: 600; letter-spacing: -0.2px; }
-.title-medium { font-size: 14px; font-weight: 600; }
-.body-small { font-size: 12px; color: #%(onSurfaceVariant)s; }
+/* Apple Typography Scale */
+.headline { font-size: 21px; font-weight: 600; letter-spacing: -0.3px; }
+.title-large { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.title-medium { font-size: 13px; font-weight: 500; }
+.body-small { font-size: 11px; color: #%(onSurfaceVariant)s; }
 .label-caps {
   font-size: 11px;
   font-weight: 600;
@@ -82,7 +82,7 @@ window.caelestia {
 .primary-text { color: #%(primary)s; }
 .error-text { color: #%(error)s; }
 
-/* Headerbar / Toolbar */
+/* Unified Toolbar / Headerbar */
 headerbar {
   background-color: #%(surfaceContainerLow)s;
   border-bottom: 1px solid #%(outlineVariant)s;
@@ -91,81 +91,109 @@ headerbar {
   padding: 0 10px;
 }
 
-/* Modern macOS Sidebar */
+/* macOS Full-Height Sidebar Source List */
 .navigation-sidebar {
   background-color: #%(surfaceContainerLow)s;
   border-right: 1px solid #%(outlineVariant)s;
 }
 .navigation-sidebar row, list.devices row {
-  border-radius: 8px;
+  border-radius: 7px;
   margin: 2px 8px;
-  padding: 7px 10px;
-  transition: background-color 140ms ease-out, color 140ms ease-out;
+  padding: 6px 10px;
+  transition: all 120ms ease-out;
 }
 .navigation-sidebar row:hover, list.devices row:hover {
-  background-color: alpha(#%(onSurface)s, 0.05);
+  background-color: alpha(#%(onSurface)s, 0.06);
 }
 .navigation-sidebar row:selected, list.devices row:selected {
-  background-color: #%(primary)s;
+  background-color: alpha(#ffffff, 0.12);
   color: #ffffff;
+}
+.navigation-sidebar row:selected .title-medium, list.devices row:selected .title-medium {
+  color: #ffffff;
+  font-weight: 600;
 }
 .navigation-sidebar row:selected .body-small, list.devices row:selected .body-small {
-  color: alpha(#ffffff, 0.75);
+  color: alpha(#ffffff, 0.72);
 }
-.navigation-sidebar row:selected .avatar {
-  background-color: alpha(#ffffff, 0.25);
-  color: #ffffff;
+.navigation-sidebar row .avatar, list.devices row .avatar {
+  border-radius: 7px;
+  min-width: 30px; min-height: 30px;
+  background-color: alpha(#%(onSurface)s, 0.08);
+  color: #%(onSurfaceVariant)s;
 }
-.navigation-sidebar row:selected .badge {
+.navigation-sidebar row .avatar.connected, list.devices row .avatar.connected {
+  background-color: #%(primary)s;
   color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.navigation-sidebar row .avatar.offline, list.devices row .avatar.offline {
+  background-color: alpha(#%(onSurface)s, 0.1);
+  color: #%(onSurfaceVariant)s;
 }
 list.flat { background: transparent; }
-list.flat row { border-radius: 8px; }
+list.flat row { border-radius: 7px; }
 
-/* Inset Grouped Surfaces */
+/* Host Card ("This PC" - Apple ID / Mac Profile Style) */
+.host-card {
+  background-color: alpha(#%(onSurface)s, 0.04);
+  border-radius: 9px;
+  border: 1px solid #%(outlineVariant)s;
+  padding: 8px 10px;
+  margin: 8px 10px 4px 10px;
+}
+.host-card .avatar {
+  border-radius: 7px;
+  min-width: 32px; min-height: 32px;
+  background: linear-gradient(135deg, #%(primary)s, #%(secondary)s);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Inset Grouped Surfaces & Cards */
 .surface-card {
+  background-color: #%(surfaceContainer)s;
+  border-radius: 10px;
+  border: 1px solid #%(outlineVariant)s;
+  padding: 14px 16px;
+}
+.surface-card.high { background-color: #%(surfaceContainerHigh)s; }
+.surface-card.tight { padding: 10px 12px; }
+
+/* Device Hero Section (Apple Continuity / AirDrop Style) */
+.hero {
   background-color: #%(surfaceContainer)s;
   border-radius: 12px;
   border: 1px solid #%(outlineVariant)s;
-  padding: 16px;
-}
-.surface-card.high { background-color: #%(surfaceContainerHigh)s; }
-.surface-card.tight { padding: 10px; }
-
-/* Device Hero Section */
-.hero {
-  background-color: #%(surfaceContainer)s;
-  border-radius: 14px;
-  border: 1px solid #%(outlineVariant)s;
-  padding: 20px;
+  padding: 16px 20px;
 }
 .hero-icon {
   background: linear-gradient(135deg, #%(primary)s, #%(secondary)s);
   color: #ffffff;
-  border-radius: 16px;
-  min-width: 68px; min-height: 68px;
-  box-shadow: 0 4px 12px alpha(#%(primary)s, 0.3);
+  border-radius: 14px;
+  min-width: 58px; min-height: 58px;
+  box-shadow: 0 4px 12px alpha(#%(primary)s, 0.35);
 }
 .avatar {
   background-color: #%(surfaceContainerHigh)s;
   color: #%(onSurfaceVariant)s;
-  border-radius: 8px;
-  min-width: 36px; min-height: 36px;
-  transition: all 140ms ease-out;
+  border-radius: 7px;
+  min-width: 32px; min-height: 32px;
+  transition: all 120ms ease-out;
 }
 .avatar.connected {
-  background-color: alpha(#%(primary)s, 0.18);
-  color: #%(primary)s;
+  background-color: #%(primary)s;
+  color: #ffffff;
 }
 .avatar.offline {
-  background-color: alpha(#%(onSurface)s, 0.08);
+  background-color: alpha(#%(onSurface)s, 0.1);
   color: #%(onSurfaceVariant)s;
 }
 
-/* Status Pills */
+/* Apple Status Pills */
 .pill {
   border-radius: 9999px;
-  padding: 3px 10px;
+  padding: 2px 9px;
   background-color: alpha(#%(onSurface)s, 0.08);
   color: #%(onSurfaceVariant)s;
   font-size: 11px;
@@ -180,45 +208,67 @@ list.flat row { border-radius: 8px; }
   color: #%(error)s;
 }
 
-/* Action Tiles (macOS Control Center Style) */
+/* Quick Action Tiles (macOS Control Center Style) */
 button.tile {
   background-color: #%(surfaceContainer)s;
   color: #%(onSurface)s;
   border-radius: 12px;
   border: 1px solid #%(outlineVariant)s;
-  padding: 12px 10px;
+  padding: 12px 8px;
   min-width: 88px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-  transition: background-color 140ms ease-out, border-color 140ms ease-out, transform 100ms ease-out;
+  transition: all 120ms ease-out;
 }
 button.tile:hover {
   background-color: #%(surfaceContainerHigh)s;
-  border-color: alpha(#%(onSurface)s, 0.15);
+  border-color: alpha(#%(onSurface)s, 0.18);
   transform: translateY(-1px);
 }
 button.tile:active {
   transform: translateY(0);
-  background-color: alpha(#%(primary)s, 0.12);
+  background-color: alpha(#%(primary)s, 0.15);
 }
-button.tile .material-icon {
-  color: #%(primary)s;
-}
-button.tile.active {
-  background-color: alpha(#%(primary)s, 0.18);
-  border-color: #%(primary)s;
-  color: #%(primary)s;
+button.tile .body-small {
+  font-size: 11px;
+  font-weight: 500;
+  color: #%(onSurface)s;
+  margin-top: 3px;
 }
 
-/* Action Buttons */
+/* Control Center Squircle Badge */
+.tile-icon-badge {
+  min-width: 32px; min-height: 32px;
+  border-radius: 8px;
+  background-color: #%(primary)s;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.tile-icon-badge .material-icon {
+  color: #ffffff;
+  font-size: 18px;
+}
+.tile-icon-badge.accent-blue { background-color: #0A84FF; }
+.tile-icon-badge.accent-green { background-color: #30D158; }
+.tile-icon-badge.accent-orange { background-color: #FF9F0A; }
+.tile-icon-badge.accent-yellow { background-color: #FFD60A; color: #1c1c1e; }
+.tile-icon-badge.accent-yellow .material-icon { color: #1c1c1e; }
+.tile-icon-badge.accent-purple { background-color: #BF5AF2; }
+.tile-icon-badge.accent-indigo { background-color: #5E5CE6; }
+.tile-icon-badge.accent-teal { background-color: #64D2FF; color: #1c1c1e; }
+.tile-icon-badge.accent-teal .material-icon { color: #1c1c1e; }
+.tile-icon-badge.accent-red { background-color: #FF453A; }
+
+/* Apple Native Buttons */
 button.filled, button.suggested-action {
   background-color: #%(primary)s;
   color: #ffffff;
-  border-radius: 7px;
-  padding: 6px 16px;
-  font-weight: 600;
+  border-radius: 6px;
+  padding: 4px 14px;
+  min-height: 28px;
+  font-weight: 500;
   font-size: 13px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-  transition: background-color 140ms ease-out;
+  transition: background-color 120ms ease-out;
 }
 button.filled:hover, button.suggested-action:hover {
   background-color: alpha(#%(primary)s, 0.88);
@@ -226,150 +276,54 @@ button.filled:hover, button.suggested-action:hover {
 button.tonal {
   background-color: alpha(#%(onSurface)s, 0.08);
   color: #%(onSurface)s;
-  border-radius: 7px;
-  padding: 6px 14px;
+  border-radius: 6px;
+  padding: 4px 12px;
+  min-height: 28px;
   font-weight: 500;
   font-size: 13px;
+  border: 1px solid alpha(#%(onSurface)s, 0.06);
   box-shadow: none;
-  transition: background-color 140ms ease-out;
+  transition: background-color 120ms ease-out;
 }
 button.tonal:hover {
-  background-color: alpha(#%(onSurface)s, 0.14);
+  background-color: alpha(#%(onSurface)s, 0.13);
 }
 button.destructive-action, button.danger {
-  background-color: alpha(#%(error)s, 0.15);
+  background-color: alpha(#%(error)s, 0.16);
   color: #%(error)s;
-  border-radius: 7px;
-  padding: 6px 14px;
-  font-weight: 600;
+  border-radius: 6px;
+  padding: 4px 12px;
+  min-height: 28px;
+  font-weight: 500;
+  font-size: 13px;
 }
 button.destructive-action:hover, button.danger:hover {
   background-color: alpha(#%(error)s, 0.25);
 }
 button.round {
   border-radius: 9999px;
-  min-width: 32px; min-height: 32px;
+  min-width: 30px; min-height: 30px;
   padding: 0;
 }
 
-/* Media Card (Apple Music Style) */
-.media-card {
-  padding: 18px 20px;
-  border-radius: 14px;
-  background-color: #%(surfaceContainer)s;
-  border: 1px solid #%(outlineVariant)s;
-}
-.media-art {
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  background-color: #%(surfaceContainerHighest)s;
-}
-scale.media trough {
-  min-height: 4px;
-  border-radius: 9999px;
-  background-color: alpha(#%(onSurface)s, 0.12);
-}
-scale.media highlight {
-  border-radius: 9999px;
-  background-color: #%(primary)s;
-}
-scale.media slider {
-  min-width: 14px; min-height: 14px;
-  margin: -5px;
-  background-color: #ffffff;
-  border-radius: 9999px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-}
-.media-title { font-size: 18px; font-weight: 600; }
-.media-artist { font-size: 14px; font-weight: 500; color: #%(onSurfaceVariant)s; }
-.media-album { font-size: 13px; color: #%(onSurfaceVariant)s; }
-.media-time { font-size: 11px; font-weight: 500; color: #%(onSurfaceVariant)s; }
-
-button.media-btn {
-  min-height: 44px; min-width: 44px; padding: 0;
-  border-radius: 9999px; box-shadow: none;
-  transition: background-color 140ms ease-out;
-}
-button.media-tonal, button.media-side {
-  background-color: alpha(#%(onSurface)s, 0.08); color: #%(onSurface)s;
-}
-button.media-side { min-width: 40px; }
-button.media-side.checked { background-color: #%(primary)s; color: #ffffff; }
-button.media-play {
-  background-color: #%(primary)s; color: #ffffff;
-  min-width: 52px; min-height: 52px;
-}
-button.media-play:hover { background-color: alpha(#%(primary)s, 0.88); }
-button.media-btn:disabled {
-  background-color: alpha(#%(onSurface)s, 0.05); color: alpha(#%(onSurface)s, 0.25);
-}
-dropdown.player-pill > button {
-  border-radius: 9999px; padding: 3px 12px; min-height: 0;
-  background-color: alpha(#%(onSurface)s, 0.08); color: #%(onSurface)s; font-size: 12px; font-weight: 500;
-}
-
-/* Messages (Apple iMessage Style) */
-.bubble {
-  border-radius: 16px;
-  padding: 8px 14px;
-  background-color: #%(surfaceContainerHigh)s;
-  color: #%(onSurface)s;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.bubble.out {
-  background-color: #%(primary)s;
-  color: #ffffff;
-}
-entry.composer, .composer {
-  border-radius: 20px;
-  background-color: #%(surfaceContainer)s;
-  border: 1px solid #%(outlineVariant)s;
-  padding: 4px 14px;
-  min-height: 36px;
-  font-size: 13px;
-}
-
-/* Touchpad (Magic Trackpad Style) */
-.touchpad {
-  background-color: #%(surfaceContainer)s;
-  border-radius: 14px;
-  border: 1px solid #%(outlineVariant)s;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-.touchpad.active { border-color: #%(primary)s; }
-
-/* Verification Key */
-.verification-key {
-  font-family: -apple-system-ui-monospaced, "SF Mono", "CaskaydiaCove NF", monospace;
-  font-size: 26px;
-  letter-spacing: 5px;
+/* Inset Grouped Settings & Preferences (macOS System Settings Style) */
+preferencesgroup > box > label.title {
+  font-size: 11px;
   font-weight: 600;
-  color: #%(primary)s;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #%(onSurfaceVariant)s;
+  margin-start: 4px;
+  margin-bottom: 6px;
+}
+preferencesgroup > box > label.description {
+  font-size: 11px;
+  color: alpha(#%(onSurface)s, 0.55);
+  margin-start: 4px;
+  margin-top: 6px;
+  line-height: 1.35;
 }
 
-/* Standard Progress & Sliders */
-progressbar trough { min-height: 4px; border-radius: 9999px; background-color: alpha(#%(onSurface)s, 0.12); }
-progressbar progress { min-height: 4px; border-radius: 9999px; background-color: #%(primary)s; }
-
-/* Apple Toggle Switch */
-switch {
-  border-radius: 9999px;
-  min-width: 44px; min-height: 24px;
-  background-color: #39393d;
-}
-switch:checked {
-  background-color: #%(success)s;
-}
-switch slider {
-  background-color: #ffffff;
-  border-radius: 9999px;
-  min-width: 20px; min-height: 20px;
-  margin: 2px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-}
-
-/* Settings: Inset Grouped Rows (macOS System Settings Style) */
 list.boxed-list, preferencesgroup list.boxed-list {
   background-color: transparent;
   border: 1px solid #%(outlineVariant)s;
@@ -384,7 +338,7 @@ list.boxed-list > row {
   border: none;
   border-bottom: 1px solid #%(outlineVariant)s;
   box-shadow: none;
-  min-height: 48px;
+  min-height: 44px;
   padding: 6px 14px;
   transition: background-color 120ms ease-out;
 }
@@ -407,44 +361,164 @@ list.boxed-list > row.plugin-options-row:selected {
 }
 list.boxed-list.plugin-options > row {
   background-color: #%(surfaceContainerLow)s;
-  min-height: 44px;
+  min-height: 40px;
 }
 row.c-row .title { font-size: 13px; font-weight: 500; }
 .c-value { font-size: 12px; color: #%(onSurfaceVariant)s; }
 
 row.expander list.nested { background-color: #%(surfaceContainerLow)s; }
-button.expand-arrow { min-width: 32px; min-height: 32px; margin-right: 4px; }
+button.expand-arrow { min-width: 28px; min-height: 28px; margin-right: 2px; }
 button.expand-arrow .material-icon { transition: transform 200ms cubic-bezier(0.2, 0, 0, 1); }
 button.expand-arrow.expanded .material-icon { transform: rotate(180deg); }
 
-/* View Switcher (Apple Segmented Control) */
+/* Apple Segmented Control (View Switcher) */
 viewswitcher, .view-switcher {
   background-color: alpha(#%(onSurface)s, 0.08);
-  border-radius: 8px;
+  border-radius: 7px;
   padding: 2px;
-  margin: 4px 0;
+  margin: 3px 0;
+  border: 1px solid alpha(#%(onSurface)s, 0.05);
 }
 viewswitcher button, .view-switcher button {
-  border-radius: 6px;
-  padding: 4px 14px;
-  min-height: 28px;
+  border-radius: 5px;
+  padding: 4px 12px;
+  min-height: 26px;
   font-size: 13px;
   font-weight: 500;
   color: #%(onSurfaceVariant)s;
   background: transparent;
   border: none;
   box-shadow: none;
-  transition: all 140ms ease-out;
+  transition: all 120ms ease-out;
 }
 viewswitcher button:hover, .view-switcher button:hover {
   color: #%(onSurface)s;
   background-color: alpha(#%(onSurface)s, 0.04);
 }
 viewswitcher button:checked, .view-switcher button:checked {
-  background-color: alpha(#%(onSurface)s, 0.18);
-  color: #%(onSurface)s;
+  background-color: alpha(#ffffff, 0.20);
+  color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* Apple Music Now Playing Card */
+.media-card {
+  padding: 16px 20px;
+  border-radius: 12px;
+  background-color: #%(surfaceContainer)s;
+  border: 1px solid #%(outlineVariant)s;
+}
+.media-art {
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  background-color: #%(surfaceContainerHighest)s;
+}
+scale.media trough {
+  min-height: 4px;
+  border-radius: 9999px;
+  background-color: alpha(#%(onSurface)s, 0.12);
+}
+scale.media highlight {
+  border-radius: 9999px;
+  background-color: #%(primary)s;
+}
+scale.media slider {
+  min-width: 14px; min-height: 14px;
+  margin: -5px;
+  background-color: #ffffff;
+  border-radius: 9999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.media-title { font-size: 16px; font-weight: 600; }
+.media-artist { font-size: 13px; font-weight: 500; color: #%(onSurfaceVariant)s; }
+.media-album { font-size: 12px; color: #%(onSurfaceVariant)s; }
+.media-time { font-size: 11px; font-weight: 500; color: #%(onSurfaceVariant)s; }
+
+button.media-btn {
+  min-height: 40px; min-width: 40px; padding: 0;
+  border-radius: 9999px; box-shadow: none;
+  transition: background-color 120ms ease-out;
+}
+button.media-tonal, button.media-side {
+  background-color: alpha(#%(onSurface)s, 0.08); color: #%(onSurface)s;
+}
+button.media-side { min-width: 36px; }
+button.media-side.checked { background-color: #%(primary)s; color: #ffffff; }
+button.media-play {
+  background-color: #%(primary)s; color: #ffffff;
+  min-width: 48px; min-height: 48px;
+  box-shadow: 0 2px 8px alpha(#%(primary)s, 0.35);
+}
+button.media-play:hover { background-color: alpha(#%(primary)s, 0.88); }
+button.media-btn:disabled {
+  background-color: alpha(#%(onSurface)s, 0.05); color: alpha(#%(onSurface)s, 0.25);
+}
+dropdown.player-pill > button {
+  border-radius: 9999px; padding: 2px 10px; min-height: 0;
+  background-color: alpha(#%(onSurface)s, 0.08); color: #%(onSurface)s; font-size: 11px; font-weight: 500;
+}
+
+/* Apple iMessage View */
+.bubble {
+  border-radius: 17px;
+  padding: 8px 14px;
+  background-color: #3A3A3C;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.bubble.out {
+  background-color: #0A84FF;
+  color: #ffffff;
+}
+entry.composer, .composer {
+  border-radius: 20px;
+  background-color: #%(surfaceContainer)s;
+  border: 1px solid #%(outlineVariant)s;
+  padding: 5px 14px;
+  min-height: 36px;
+  font-size: 13px;
+}
+
+/* Magic Trackpad (Touchpad) */
+.touchpad {
+  background-color: #%(surfaceContainer)s;
+  border-radius: 12px;
+  border: 1px solid #%(outlineVariant)s;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.touchpad.active { border-color: #%(primary)s; }
+
+/* Verification Key */
+.verification-key {
+  font-family: -apple-system-ui-monospaced, "SF Mono", "CaskaydiaCove NF", monospace;
+  font-size: 26px;
+  letter-spacing: 5px;
+  font-weight: 600;
+  color: #%(primary)s;
+}
+
+/* Sliders & Progress */
+progressbar trough { min-height: 4px; border-radius: 9999px; background-color: alpha(#%(onSurface)s, 0.12); }
+progressbar progress { min-height: 4px; border-radius: 9999px; background-color: #%(primary)s; }
+
+/* Native Switch Fallback */
+switch {
+  border-radius: 9999px;
+  min-width: 44px; min-height: 24px;
+  background-color: #39393d;
+}
+switch:checked {
+  background-color: #%(success)s;
+}
+switch slider {
+  background-color: #ffffff;
+  border-radius: 9999px;
+  min-width: 20px; min-height: 20px;
+  margin: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .toast {
@@ -453,5 +527,5 @@ viewswitcher button:checked, .view-switcher button:checked {
   color: #%(inverseOnSurface)s;
   font-size: 12px;
   font-weight: 500;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
