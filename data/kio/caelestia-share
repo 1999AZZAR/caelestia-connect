@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Share files through Caelestia Connect, for KIO service menus (Dolphin).
+
+The KDE Connect "Share to <device>" menu disappears when kdeconnectd is not
+running, so this provides the same action against the Caelestia daemon: one
+partner sends directly, several ask which one.
+"""
+
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+
+SOCKET = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "caelestia-connect", "ipc.sock")
+
+
+def call(method, **params):
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    client.settimeout(5)
+    try:
+        client.connect(SOCKET)
+        client.sendall(json.dumps({"id": 1, "method": method, "params": params}).encode() + b"\n")
+        buffer = b""
+        while b"\n" not in buffer:
+            chunk = client.recv(65536)
+            if not chunk:
+                break
+            buffer += chunk
+        reply = json.loads(buffer.split(b"\n", 1)[0])
+        if "error" in reply:
+            raise RuntimeError(reply["error"].get("message") or reply["error"])
+        return reply.get("result")
+    finally:
+        client.close()
+
+
+def notify(message, error=False):
+    if shutil.which("kdialog"):
+        args = ["kdialog", "--error", message] if error else ["kdialog", "--passivepopup", message, "4"]
+        subprocess.run(args, check=False)
+    elif shutil.which("notify-send"):
+        subprocess.run(["notify-send", "-a", "Caelestia Connect", "Caelestia Connect", message], check=False)
+    else:
+        print(message, file=sys.stderr)
+
+
+def share_targets():
+    state = call("state") or {}
+    return [
+        device
+        for device in state.get("devices", [])
+        if device.get("paired")
+        and device.get("reachable")
+        and any(plugin.get("id") == "share" and plugin.get("loaded") for plugin in device.get("plugins", []))
+    ]
+
+
+def pick(devices):
+    if len(devices) == 1:
+        return devices[0]
+    if not shutil.which("kdialog"):
+        return devices[0]
+    args = ["kdialog", "--title", "Share via Celestia", "--radiolist", "Send to which device?"]
+    for device in devices:
+        args.extend([device["id"], device["name"], "off"])
+    result = subprocess.run(args, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        return None
+    chosen = result.stdout.strip()
+    return next((device for device in devices if device["id"] == chosen), None)
+
+
+def main(argv):
+    paths = [os.path.abspath(path) for path in argv if os.path.exists(path)]
+    if not paths:
+        notify("Nothing to share: select files first.", error=True)
+        return 1
+    try:
+        devices = share_targets()
+    except (OSError, ValueError, RuntimeError) as error:
+        notify(f"Caelestia Connect is not running ({error}).", error=True)
+        return 1
+    if not devices:
+        notify("No paired device is connected. Pair one in Caelestia Connect.", error=True)
+        return 1
+    target = pick(devices)
+    if target is None:
+        return 0
+    try:
+        call("device.call", device=target["id"], plugin="share", action="share_files", args={"paths": paths})
+    except (OSError, ValueError, RuntimeError) as error:
+        notify(f"Could not send to {target['name']}: {error}", error=True)
+        return 1
+    count = len(paths)
+    notify(f"Sending {count} file{'s' if count != 1 else ''} to {target['name']} via Celestia")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

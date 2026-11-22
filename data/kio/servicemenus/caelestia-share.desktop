@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Service
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;
+Actions=shareViaCaelestia;
+X-KDE-Priority=TopLevel
+Icon=phone
+Name=Share via Celestia
+
+[Desktop Action shareViaCaelestia]
+Name=Share via Celestia…
+Icon=phone
+Exec=@BIN@/caelestia-share %F

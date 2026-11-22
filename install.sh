@@ -115,6 +115,13 @@ fi
 sed "s|@BIN@|$BIN|g" "$SRC/data/org.caelestia.Connect.desktop" >"$APPS/org.caelestia.Connect.desktop"
 cp "$SRC/data/org.caelestia.Connect.svg" "$ICONS/"
 cp "$SRC/data/nautilus/caelestia_connect_nautilus.py" "$NAUTILUS/"
+
+echo ":: Installing the Dolphin share action"
+KIO_SERVICEMENUS="${XDG_DATA_HOME:-$HOME/.local/share}/kio/servicemenus"
+mkdir -p "$KIO_SERVICEMENUS"
+sed "s|@BIN@|$BIN|g" "$SRC/data/kio/servicemenus/caelestia-share.desktop" >"$KIO_SERVICEMENUS/caelestia-share.desktop"
+install -m 755 "$SRC/data/kio/caelestia-share" "$BIN/caelestia-share"
+command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 --noincremental 2>/dev/null || true
 command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -t "${ICONS%/scalable/apps}" 2>/dev/null || true
 
