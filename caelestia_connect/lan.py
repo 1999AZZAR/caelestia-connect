@@ -613,6 +613,11 @@ class LanLinkProvider:
         if self._is_self_address(host):
             log.debug("Not connecting to our own address %s for %s", host, device_id)
             return
+        # The same device is reachable over several interfaces (LAN and a tunnel);
+        # dialling each address would replace the live link over and over.
+        existing = self.links.get(device_id)
+        if existing is not None and not existing.closed:
+            return
         if self._backing_off(device_id):
             return
         if not force and self._rate_limited(self._last_by_id, device_id):

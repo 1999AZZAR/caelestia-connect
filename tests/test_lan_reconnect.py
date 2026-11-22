@@ -88,6 +88,16 @@ def test_self_address_predicate_excludes_loopback():
     assert not p._is_self_address("192.168.1.50")
 
 
+def test_a_device_with_a_live_link_is_not_dialled_again():
+    p = provider()
+    clock = Clock()
+    p.links[PHONE_ID] = type("Link", (), {"closed": False})()
+    assert attempt(p, clock, force=True) == [], "a second address for the same device must not replace the link"
+
+    p.links[PHONE_ID].closed = True
+    assert attempt(p, clock, force=True) == ["lan:connect:192.168.1.50"], "a closed link is dialled again"
+
+
 def test_a_normal_peer_is_dialled():
     p = provider()
     clock = Clock()
