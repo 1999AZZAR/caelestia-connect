@@ -182,7 +182,13 @@ def test_mirroring() -> None:
         # Mirroring with custom resolution, bitrate, fps and virtual display
         p3 = plugin()
         p3.device.config.settings.update(
-            {"max_size": 1080, "video_bit_rate": "16M", "max_fps": 60, "new_display": "1920x1080", "custom_args": "--hover"}
+            {
+                "max_size": 1080,
+                "video_bit_rate": "16M",
+                "max_fps": 60,
+                "new_display": "1920x1080",
+                "custom_args": "--hover",
+            }
         )
         assert await p3.mirror() == {}
         last_call = calls("scrcpy")[-1]

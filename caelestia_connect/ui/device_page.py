@@ -130,13 +130,15 @@ class DevicePage(Gtk.Box):
         self.narrow = False
 
     def set_compact(self, compact: bool) -> None:
-        self.overview.media_card.set_compact(compact)
+        self.overview.set_compact(compact)
 
     def set_narrow(self, narrow: bool) -> None:
         self.narrow = narrow
         paired = bool(self.device.get("paired"))
         self.switcher.set_visible(paired and not narrow)
         self.switcher_bar.set_reveal(paired and narrow)
+        if hasattr(self, "messages"):
+            self.messages.set_narrow(narrow)
 
     def set_device(self, device_id: str) -> None:
         self.device_id = device_id

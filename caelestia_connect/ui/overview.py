@@ -21,26 +21,26 @@ class Overview(Gtk.ScrolledWindow):
         clamp = Adw.Clamp(maximum_size=860, tightening_threshold=600)
         self.box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=16,
-            margin_top=8,
-            margin_bottom=24,
-            margin_start=16,
-            margin_end=16,
+            spacing=20,
+            margin_top=12,
+            margin_bottom=28,
+            margin_start=20,
+            margin_end=20,
         )
         clamp.set_child(self.box)
         self.set_child(clamp)
         self._sigs: dict[str, str] = {}
 
-        hero = Gtk.Box(spacing=20)
+        hero = Gtk.Box(spacing=18)
         hero.add_css_class("hero")
-        self.hero_icon = w.Icon("smartphone", "huge", filled=True)
+        self.hero_icon = w.Icon("smartphone", "large", filled=True)
         hero.append(w.circle(self.hero_icon, "hero-icon"))
-        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER, hexpand=True)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, valign=Gtk.Align.CENTER, hexpand=True)
         self.hero_name = w.label(css=["headline"], ellipsize=True)
         col.append(self.hero_name)
         self.pills = Gtk.FlowBox(
             selection_mode=Gtk.SelectionMode.NONE,
-            max_children_per_line=8,
+            max_children_per_line=6,
             column_spacing=6,
             row_spacing=6,
             homogeneous=False,
@@ -51,10 +51,10 @@ class Overview(Gtk.ScrolledWindow):
 
         self.tiles = Gtk.FlowBox(
             selection_mode=Gtk.SelectionMode.NONE,
-            max_children_per_line=6,
-            min_children_per_line=3,
-            column_spacing=8,
-            row_spacing=8,
+            max_children_per_line=4,
+            min_children_per_line=2,
+            column_spacing=12,
+            row_spacing=12,
             homogeneous=True,
         )
         self.box.append(self.tiles)
@@ -112,11 +112,14 @@ class Overview(Gtk.ScrolledWindow):
             if android.get("mirroring"):
                 tiles.append(("stop_screen_share", _("Stop mirroring"), self._act("android", "stop_mirror")))
                 screen_on = android.get("screenOn", True)
+                caption = _("Turn screen off") if screen_on else _("Turn screen on")
+                tip = _("Turn screen off (Alt+O)") if screen_on else _("Turn screen on (Alt+Shift+O)")
                 tiles.append(
                     (
                         "screen_lock_portrait" if screen_on else "mobile_lock_portrait",
-                        _("Turn screen off (Alt+O)") if screen_on else _("Turn screen on (Alt+Shift+O)"),
+                        caption,
                         self._act("android", "toggle_screen"),
+                        tip,
                     )
                 )
             else:
@@ -161,8 +164,18 @@ class Overview(Gtk.ScrolledWindow):
             return
         self._sigs["tiles"] = sig
         self.tiles.remove_all()
-        for icon, text, cb in tiles:
-            self.tiles.append(w.Tile(icon, text, cb))
+        for item in tiles:
+            icon, text, cb = item[0], item[1], item[2]
+            tip = item[3] if len(item) > 3 else ""
+            self.tiles.append(w.Tile(icon, text, cb, tooltip=tip))
+
+    def set_compact(self, compact: bool) -> None:
+        self.box.set_margin_start(14 if compact else 20)
+        self.box.set_margin_end(14 if compact else 20)
+        self.box.set_spacing(16 if compact else 20)
+        self.tiles.set_max_children_per_line(2 if compact else 4)
+        if hasattr(self, "media_card"):
+            self.media_card.set_compact(compact)
 
     def _extend_display(self) -> None:
         def done(result):
@@ -245,14 +258,18 @@ class Overview(Gtk.ScrolledWindow):
         row = Gtk.Box(spacing=12, margin_top=6, margin_bottom=6)
         if n["icon"]:
             pic = Gtk.Image.new_from_file(n["icon"])
-            pic.set_pixel_size(36)
+            pic.set_pixel_size(32)
             pic.set_valign(Gtk.Align.START)
             row.append(pic)
         else:
-            row.append(w.Icon("notifications", "large", css=["dim"]))
-        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+            ico = w.Icon("notifications", "large", css=["dim"])
+            ico.set_valign(Gtk.Align.START)
+            row.append(ico)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, hexpand=True)
         top = Gtk.Box(spacing=6)
-        top.append(w.label(n["appName"], css=["label-caps"]))
+        app_name = w.label(n["appName"], css=["label-caps"], ellipsize=True)
+        app_name.set_max_width_chars(20)
+        top.append(app_name)
         top.append(w.label("· " + time.strftime("%H:%M", time.localtime(n["time"])), css=["body-small"]))
         col.append(top)
         if n["title"]:
@@ -262,7 +279,13 @@ class Overview(Gtk.ScrolledWindow):
             t.set_lines(4)
             t.set_ellipsize(Pango.EllipsizeMode.END)
             col.append(t)
-        btns = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=6, column_spacing=6)
+        btns = Gtk.FlowBox(
+            selection_mode=Gtk.SelectionMode.NONE,
+            max_children_per_line=4,
+            column_spacing=8,
+            row_spacing=8,
+            margin_top=6,
+        )
 
         def invoke(action: str) -> None:
             self.app.plugin(dev, "notifications", "invoke_action", id=n["id"], action=action)
@@ -287,11 +310,11 @@ class Overview(Gtk.ScrolledWindow):
             col.append(btns)
         row.append(col)
         if n["dismissable"]:
-            row.append(
-                w.icon_button(
-                    "close", _("Dismiss"), callback=lambda: self.app.plugin(dev, "notifications", "dismiss", id=n["id"])
-                )
+            dismiss_btn = w.icon_button(
+                "close", _("Dismiss"), callback=lambda: self.app.plugin(dev, "notifications", "dismiss", id=n["id"])
             )
+            dismiss_btn.set_valign(Gtk.Align.START)
+            row.append(dismiss_btn)
         return row
 
     def _update_transfers(self, state: dict) -> None:
@@ -309,7 +332,7 @@ class Overview(Gtk.ScrolledWindow):
             head.append(w.text_button(_("Clear"), None, ["flat"], lambda: self.app.call("transfers.clear")))
         self.transfers.append(head)
         for t in items:
-            r = Gtk.Box(spacing=12)
+            r = Gtk.Box(spacing=12, margin_top=4, margin_bottom=4)
             r.append(
                 w.Icon(
                     "download" if t["direction"] == "download" else "upload",
@@ -366,7 +389,11 @@ class Overview(Gtk.ScrolledWindow):
         w.clear(self.commands)
         self.commands.append(w.section_title(_("Commands")))
         flow = Gtk.FlowBox(
-            selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=4, column_spacing=8, row_spacing=8
+            selection_mode=Gtk.SelectionMode.NONE,
+            max_children_per_line=3,
+            min_children_per_line=1,
+            column_spacing=10,
+            row_spacing=10,
         )
         for c in cmds:
             flow.append(

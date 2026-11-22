@@ -27,7 +27,12 @@ class AndroidPlugin(Plugin):
     settings_schema = [
         {"key": "webcam", "type": "bool", "label": _("Use the camera as a webcam"), "default": True},
         {"key": "audio", "type": "bool", "label": _("Forward audio while mirroring"), "default": True},
-        {"key": "turn_screen_off", "type": "bool", "label": _("Turn phone screen off while mirroring"), "default": False},
+        {
+            "key": "turn_screen_off",
+            "type": "bool",
+            "label": _("Turn phone screen off while mirroring"),
+            "default": False,
+        },
         {"key": "stay_awake", "type": "bool", "label": _("Stay awake while mirroring"), "default": True},
         {
             "key": "max_size",

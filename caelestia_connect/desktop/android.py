@@ -90,7 +90,11 @@ async def find(name: str, address: str) -> Scan:
         res_name = await adb("-s", serial, "shell", "settings", "get", "global", "device_name", timeout=4)
         dev_name = res_name.stdout.strip() if res_name.ok else ""
         names[serial] = dev_name or model
-        if dev_name and (dev_name.casefold() == target or dev_name.casefold() in target or target in dev_name.casefold()):
+        if dev_name and (
+            dev_name.casefold() == target
+            or dev_name.casefold() in target
+            or target in dev_name.casefold()
+        ):
             scan.serial = serial
             return scan
 

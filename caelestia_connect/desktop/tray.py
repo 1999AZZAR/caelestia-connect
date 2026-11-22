@@ -149,7 +149,9 @@ class StatusNotifierTray:
             if self.icon_name != prev_icon:
                 self.conn.emit_signal(None, OBJECT_PATH, INTERFACE_NAME, "NewIcon", None)
             if self.status != prev_status:
-                self.conn.emit_signal(None, OBJECT_PATH, INTERFACE_NAME, "NewStatus", GLib.Variant("(s)", (self.status,)))
+                self.conn.emit_signal(
+                    None, OBJECT_PATH, INTERFACE_NAME, "NewStatus", GLib.Variant("(s)", (self.status,))
+                )
         except GLib.Error:
             pass
 

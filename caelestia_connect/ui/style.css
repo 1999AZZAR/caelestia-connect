@@ -34,14 +34,13 @@
   --error-bg-color: #%(error)s;
   --error-color: #%(error)s;
   --border-color: #%(outlineVariant)s;
-  --window-radius: 12px;
+  --window-radius: 16px;
   --document-font-family: %(sans)s;
   --font-family: %(sans)s;
 }
 
 window, .background {
   font-family: %(sans)s;
-  -gtk-font-smoothing: antialiased;
 }
 
 /* macOS Window Frame */
@@ -97,9 +96,10 @@ headerbar {
   border-right: 1px solid #%(outlineVariant)s;
 }
 .navigation-sidebar row, list.devices row {
-  border-radius: 7px;
-  margin: 2px 8px;
-  padding: 6px 10px;
+  border-radius: 10px;
+  margin: 2px 10px;
+  padding: 7px 10px;
+  min-height: 44px;
   transition: all 120ms ease-out;
 }
 .navigation-sidebar row:hover, list.devices row:hover {
@@ -117,8 +117,8 @@ headerbar {
   color: alpha(#ffffff, 0.72);
 }
 .navigation-sidebar row .avatar, list.devices row .avatar {
-  border-radius: 7px;
-  min-width: 30px; min-height: 30px;
+  border-radius: 8px;
+  min-width: 32px; min-height: 32px;
   background-color: alpha(#%(onSurface)s, 0.08);
   color: #%(onSurfaceVariant)s;
 }
@@ -132,18 +132,17 @@ headerbar {
   color: #%(onSurfaceVariant)s;
 }
 list.flat { background: transparent; }
-list.flat row { border-radius: 7px; }
+list.flat row { border-radius: 10px; }
 
 /* Host Card ("This PC" - Apple ID / Mac Profile Style) */
 .host-card {
   background-color: alpha(#%(onSurface)s, 0.04);
-  border-radius: 9px;
-  border: 1px solid #%(outlineVariant)s;
-  padding: 8px 10px;
-  margin: 8px 10px 4px 10px;
+  border-radius: 12px;
+  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  padding: 10px 12px;
 }
 .host-card .avatar {
-  border-radius: 7px;
+  border-radius: 8px;
   min-width: 32px; min-height: 32px;
   background: linear-gradient(135deg, #%(primary)s, #%(secondary)s);
   color: #ffffff;
@@ -153,31 +152,34 @@ list.flat row { border-radius: 7px; }
 /* Inset Grouped Surfaces & Cards */
 .surface-card {
   background-color: #%(surfaceContainer)s;
-  border-radius: 10px;
-  border: 1px solid #%(outlineVariant)s;
-  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  padding: 18px 20px;
 }
 .surface-card.high { background-color: #%(surfaceContainerHigh)s; }
-.surface-card.tight { padding: 10px 12px; }
+.surface-card.tight { padding: 12px 14px; }
 
 /* Device Hero Section (Apple Continuity / AirDrop Style) */
 .hero {
   background-color: #%(surfaceContainer)s;
-  border-radius: 12px;
-  border: 1px solid #%(outlineVariant)s;
-  padding: 16px 20px;
+  border-radius: 16px;
+  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  padding: 18px 20px;
 }
 .hero-icon {
   background: linear-gradient(135deg, #%(primary)s, #%(secondary)s);
   color: #ffffff;
   border-radius: 14px;
-  min-width: 58px; min-height: 58px;
-  box-shadow: 0 4px 12px alpha(#%(primary)s, 0.35);
+  min-width: 56px; min-height: 56px;
+  box-shadow: 0 4px 12px alpha(#%(primary)s, 0.30);
+}
+.hero-icon .material-icon {
+  font-size: 32px;
 }
 .avatar {
   background-color: #%(surfaceContainerHigh)s;
   color: #%(onSurfaceVariant)s;
-  border-radius: 7px;
+  border-radius: 8px;
   min-width: 32px; min-height: 32px;
   transition: all 120ms ease-out;
 }
@@ -193,7 +195,7 @@ list.flat row { border-radius: 7px; }
 /* Apple Status Pills */
 .pill {
   border-radius: 9999px;
-  padding: 2px 9px;
+  padding: 3px 10px;
   background-color: alpha(#%(onSurface)s, 0.08);
   color: #%(onSurfaceVariant)s;
   font-size: 11px;
@@ -212,40 +214,38 @@ list.flat row { border-radius: 7px; }
 button.tile {
   background-color: #%(surfaceContainer)s;
   color: #%(onSurface)s;
-  border-radius: 12px;
-  border: 1px solid #%(outlineVariant)s;
-  padding: 12px 8px;
-  min-width: 88px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  padding: 12px 10px;
+  min-width: 100px;
+  box-shadow: none;
   transition: all 120ms ease-out;
 }
 button.tile:hover {
   background-color: #%(surfaceContainerHigh)s;
-  border-color: alpha(#%(onSurface)s, 0.18);
-  transform: translateY(-1px);
+  border-color: alpha(#%(onSurface)s, 0.16);
 }
 button.tile:active {
-  transform: translateY(0);
-  background-color: alpha(#%(primary)s, 0.15);
+  background-color: alpha(#%(primary)s, 0.16);
 }
 button.tile .body-small {
   font-size: 11px;
   font-weight: 500;
   color: #%(onSurface)s;
-  margin-top: 3px;
+  margin-top: 0;
 }
 
 /* Control Center Squircle Badge */
 .tile-icon-badge {
-  min-width: 32px; min-height: 32px;
-  border-radius: 8px;
+  min-width: 36px; min-height: 36px;
+  border-radius: 10px;
   background-color: #%(primary)s;
   color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 .tile-icon-badge .material-icon {
   color: #ffffff;
-  font-size: 18px;
+  font-size: 20px;
 }
 .tile-icon-badge.accent-blue { background-color: #0A84FF; }
 .tile-icon-badge.accent-green { background-color: #30D158; }
@@ -262,9 +262,9 @@ button.tile .body-small {
 button.filled, button.suggested-action {
   background-color: #%(primary)s;
   color: #ffffff;
-  border-radius: 6px;
-  padding: 4px 14px;
-  min-height: 28px;
+  border-radius: 8px;
+  padding: 5px 14px;
+  min-height: 30px;
   font-weight: 500;
   font-size: 13px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
@@ -276,9 +276,9 @@ button.filled:hover, button.suggested-action:hover {
 button.tonal {
   background-color: alpha(#%(onSurface)s, 0.08);
   color: #%(onSurface)s;
-  border-radius: 6px;
-  padding: 4px 12px;
-  min-height: 28px;
+  border-radius: 8px;
+  padding: 5px 12px;
+  min-height: 30px;
   font-weight: 500;
   font-size: 13px;
   border: 1px solid alpha(#%(onSurface)s, 0.06);
@@ -291,9 +291,9 @@ button.tonal:hover {
 button.destructive-action, button.danger {
   background-color: alpha(#%(error)s, 0.16);
   color: #%(error)s;
-  border-radius: 6px;
-  padding: 4px 12px;
-  min-height: 28px;
+  border-radius: 8px;
+  padding: 5px 12px;
+  min-height: 30px;
   font-weight: 500;
   font-size: 13px;
 }
@@ -302,7 +302,7 @@ button.destructive-action:hover, button.danger:hover {
 }
 button.round {
   border-radius: 9999px;
-  min-width: 30px; min-height: 30px;
+  min-width: 32px; min-height: 32px;
   padding: 0;
 }
 
@@ -313,33 +313,32 @@ preferencesgroup > box > label.title {
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: #%(onSurfaceVariant)s;
-  margin-start: 4px;
-  margin-bottom: 6px;
+  margin-left: 6px;
+  margin-bottom: 8px;
 }
 preferencesgroup > box > label.description {
   font-size: 11px;
   color: alpha(#%(onSurface)s, 0.55);
-  margin-start: 4px;
+  margin-left: 6px;
   margin-top: 6px;
   line-height: 1.35;
 }
 
 list.boxed-list, preferencesgroup list.boxed-list {
-  background-color: transparent;
-  border: 1px solid #%(outlineVariant)s;
-  border-radius: 10px;
-  overflow: hidden;
+  background-color: #%(surfaceContainer)s;
+  border: 1px solid alpha(#%(onSurface)s, 0.10);
+  border-radius: 14px;
   box-shadow: none;
 }
 list.boxed-list > row {
-  background-color: #%(surfaceContainer)s;
+  background-color: transparent;
   border-radius: 0;
   margin: 0;
   border: none;
-  border-bottom: 1px solid #%(outlineVariant)s;
+  border-bottom: 1px solid alpha(#%(outlineVariant)s, 0.5);
   box-shadow: none;
-  min-height: 44px;
-  padding: 6px 14px;
+  min-height: 48px;
+  padding: 8px 16px;
   transition: background-color 120ms ease-out;
 }
 list.boxed-list > row:last-child {
@@ -359,9 +358,14 @@ list.boxed-list > row.plugin-options-row:hover,
 list.boxed-list > row.plugin-options-row:selected {
   background-color: transparent; padding: 0; margin: 0; border: none; min-height: 0;
 }
-list.boxed-list.plugin-options > row {
+list.boxed-list.plugin-options {
   background-color: #%(surfaceContainerLow)s;
-  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid alpha(#%(onSurface)s, 0.06);
+}
+list.boxed-list.plugin-options > row {
+  background-color: transparent;
+  min-height: 42px;
 }
 row.c-row .title { font-size: 13px; font-weight: 500; }
 .c-value { font-size: 12px; color: #%(onSurfaceVariant)s; }
@@ -374,15 +378,15 @@ button.expand-arrow.expanded .material-icon { transform: rotate(180deg); }
 /* Apple Segmented Control (View Switcher) */
 viewswitcher, .view-switcher {
   background-color: alpha(#%(onSurface)s, 0.08);
-  border-radius: 7px;
-  padding: 2px;
+  border-radius: 10px;
+  padding: 3px;
   margin: 3px 0;
   border: 1px solid alpha(#%(onSurface)s, 0.05);
 }
 viewswitcher button, .view-switcher button {
-  border-radius: 5px;
-  padding: 4px 12px;
-  min-height: 26px;
+  border-radius: 7px;
+  padding: 4px 14px;
+  min-height: 28px;
   font-size: 13px;
   font-weight: 500;
   color: #%(onSurfaceVariant)s;
@@ -404,14 +408,14 @@ viewswitcher button:checked, .view-switcher button:checked {
 
 /* Apple Music Now Playing Card */
 .media-card {
-  padding: 16px 20px;
-  border-radius: 12px;
+  padding: 20px;
+  border-radius: 16px;
   background-color: #%(surfaceContainer)s;
-  border: 1px solid #%(outlineVariant)s;
+  border: 1px solid alpha(#%(onSurface)s, 0.08);
 }
 .media-art {
-  border-radius: 12px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
   border: 1px solid alpha(#%(onSurface)s, 0.08);
   background-color: #%(surfaceContainerHighest)s;
 }
@@ -485,8 +489,8 @@ entry.composer, .composer {
 /* Magic Trackpad (Touchpad) */
 .touchpad {
   background-color: #%(surfaceContainer)s;
-  border-radius: 12px;
-  border: 1px solid #%(outlineVariant)s;
+  border-radius: 16px;
+  border: 1px solid alpha(#%(onSurface)s, 0.08);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .touchpad.active { border-color: #%(primary)s; }

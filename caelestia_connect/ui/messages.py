@@ -63,7 +63,7 @@ class MessagesView(Gtk.Box):
         self._filter = ""
 
         self.split = Adw.NavigationSplitView(
-            min_sidebar_width=260, max_sidebar_width=360, sidebar_width_fraction=0.36, hexpand=True
+            min_sidebar_width=220, max_sidebar_width=360, sidebar_width_fraction=0.36, hexpand=True
         )
         self.append(self.split)
 
@@ -128,6 +128,9 @@ class MessagesView(Gtk.Box):
         self.split.set_content(Adw.NavigationPage(title=_("Messages"), child=self.thread_stack))
         self.split.connect("notify::collapsed", lambda *_: self.back.set_visible(self.split.get_collapsed()))
         self.back.set_visible(False)
+
+    def set_narrow(self, narrow: bool) -> None:
+        self.split.set_collapsed(narrow)
 
     def reset(self) -> None:
         self.thread = None

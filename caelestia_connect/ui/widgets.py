@@ -76,10 +76,12 @@ def icon_button(
 
 def text_button(text: str, icon: str | None = None, css: list[str] | None = None, callback=None) -> Gtk.Button:
     b = Gtk.Button()
-    box = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+    box = Gtk.Box(spacing=6, halign=Gtk.Align.CENTER)
     if icon:
         box.append(Icon(icon, "small"))
-    box.append(Gtk.Label(label=text))
+    lb = Gtk.Label(label=text, ellipsize=Pango.EllipsizeMode.END)
+    lb.set_max_width_chars(28)
+    box.append(lb)
     b.set_child(box)
     for c in css or ["tonal"]:
         b.add_css_class(c)
@@ -109,9 +111,9 @@ TILE_COLORS = {
 
 
 class Tile(Gtk.Button):
-    """Quick action tile: Apple squircle badge icon over a short label."""
+    """Quick action tile: Apple squircle badge icon over a clean label."""
 
-    def __init__(self, icon: str, text: str, callback=None) -> None:
+    def __init__(self, icon: str, text: str, callback=None, tooltip: str = "") -> None:
         super().__init__()
         self.add_css_class("tile")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
@@ -122,9 +124,14 @@ class Tile(Gtk.Button):
         self.icon = Icon(icon, "medium")
         badge.set_center_widget(self.icon)
         box.append(badge)
-        self.text = label(text, xalign=0.5, ellipsize=True, css=["body-small"])
+        self.text = label(text, xalign=0.5, wrap=True, css=["body-small"])
+        self.text.set_justify(Gtk.Justification.CENTER)
+        self.text.set_lines(2)
+        self.text.set_ellipsize(Pango.EllipsizeMode.END)
         box.append(self.text)
         self.set_child(box)
+        if tooltip:
+            self.set_tooltip_text(tooltip)
         if callback:
             self.connect("clicked", lambda *_: callback())
 
@@ -146,7 +153,7 @@ def circle(icon: Icon, css: str = "avatar") -> Gtk.Box:
 
 
 def card(child: Gtk.Widget | None = None, css: list[str] | None = None) -> Gtk.Box:
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
     box.add_css_class("surface-card")
     for c in css or []:
         box.add_css_class(c)
@@ -162,6 +169,9 @@ def section_title(text: str) -> Gtk.Label:
 def pill(text: str, kind: str = "") -> Gtk.Label:
     lb = Gtk.Label(label=text)
     lb.add_css_class("pill")
+    lb.set_ellipsize(Pango.EllipsizeMode.END)
+    lb.set_max_width_chars(26)
+    lb.set_tooltip_text(text)
     if kind:
         lb.add_css_class(kind)
     return lb

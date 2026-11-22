@@ -18,17 +18,18 @@ class DeviceRow(Gtk.ListBoxRow):
     def __init__(self, device: dict) -> None:
         super().__init__()
         self.device_id = device["id"]
-        box = Gtk.Box(spacing=12)
+        box = Gtk.Box(spacing=10)
         self.icon = w.Icon("smartphone", "medium", filled=True)
         self.avatar = w.circle(self.icon)
         box.append(self.avatar)
-        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
+        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, valign=Gtk.Align.CENTER, hexpand=True)
         self.name = w.label(css=["title-medium"], ellipsize=True)
         self.status = w.label(css=["body-small"], ellipsize=True)
         texts.append(self.name)
         texts.append(self.status)
         box.append(texts)
         self.badge = w.Icon("", "small", css=["primary-text"])
+        self.badge.set_visible(False)
         box.append(self.badge)
         self.set_child(box)
         self.update(device)
@@ -56,6 +57,8 @@ class DeviceRow(Gtk.ListBoxRow):
             status = _("Connected")
         self.status.set_label(status)
         unread = d["state"].get("sms", {}).get("unread", 0)
+        has_badge = d["pairState"] == "requestedByPeer" or bool(unread)
+        self.badge.set_visible(has_badge)
         self.badge.set_icon(
             "priority_high" if d["pairState"] == "requestedByPeer" else ("mark_chat_unread" if unread else "")
         )
@@ -84,8 +87,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.add_breakpoint(bp)
         bp_small = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 560sp"))
         bp_small.add_setter(self.split, "collapsed", True)
-        bp_small.connect("apply", lambda *_: self.device_page.set_compact(True))
-        bp_small.connect("unapply", lambda *_: self.device_page.set_compact(False))
+        bp_small.connect("apply", lambda *_: (self.device_page.set_narrow(True), self.device_page.set_compact(True)))
+        bp_small.connect(
+            "unapply",
+            lambda *_: (self.device_page.set_compact(False), self.device_page.set_narrow(self.split.get_collapsed())),
+        )
         self.add_breakpoint(bp_small)
 
         self.split.set_sidebar(self._build_sidebar())
@@ -130,15 +136,15 @@ class MainWindow(Adw.ApplicationWindow):
         self.add_action(act)
         tv.add_top_bar(hb)
 
-        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=4, margin_bottom=12)
-        me = Gtk.Box(spacing=12, margin_start=10, margin_end=10, margin_bottom=4)
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_top=6, margin_bottom=12)
+        me = Gtk.Box(spacing=10, margin_start=12, margin_end=12, margin_top=4, margin_bottom=4)
         me.add_css_class("host-card")
         ic = w.Icon("laptop", "medium", filled=True)
         av = w.circle(ic)
         av.add_css_class("connected")
         self.self_icon = ic
         me.append(av)
-        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, valign=Gtk.Align.CENTER, hexpand=True)
         self.self_name = w.label(css=["title-medium"], ellipsize=True)
         self.self_status = w.label(css=["body-small"], ellipsize=True)
         col.append(self.self_name)
@@ -148,8 +154,9 @@ class MainWindow(Adw.ApplicationWindow):
         body.append(me)
 
         devices_title = w.section_title(_("Devices"))
-        devices_title.set_margin_start(16)
-        devices_title.set_margin_top(4)
+        devices_title.set_margin_start(22)
+        devices_title.set_margin_top(14)
+        devices_title.set_margin_bottom(6)
         body.append(devices_title)
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.list.add_css_class("navigation-sidebar")
