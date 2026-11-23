@@ -49,13 +49,11 @@ class Overview(Gtk.ScrolledWindow):
         hero.append(col)
         self.box.append(hero)
 
-        self.tiles = Gtk.FlowBox(
-            selection_mode=Gtk.SelectionMode.NONE,
-            max_children_per_line=3,
-            min_children_per_line=2,
+        self.tiles = Gtk.Grid(
             column_spacing=12,
             row_spacing=10,
-            homogeneous=True,
+            column_homogeneous=True,
+            hexpand=True,
         )
         self.box.append(self.tiles)
 
@@ -163,17 +161,27 @@ class Overview(Gtk.ScrolledWindow):
         if self._sigs.get("tiles") == sig:
             return
         self._sigs["tiles"] = sig
-        self.tiles.remove_all()
-        for item in tiles:
+        w.clear(self.tiles)
+        n = len(tiles)
+        for i, item in enumerate(tiles):
             icon, text, cb = item[0], item[1], item[2]
             tip = item[3] if len(item) > 3 else ""
-            self.tiles.append(w.Tile(icon, text, cb, tooltip=tip))
+            tile = w.Tile(icon, text, cb, tooltip=tip)
+            tile.set_hexpand(True)
+            if n % 2 == 1 and i == n - 1:
+                row = i // 2
+                self.tiles.attach(tile, 0, row, 2, 1)
+            else:
+                col = i % 2
+                row = i // 2
+                self.tiles.attach(tile, col, row, 1, 1)
 
     def set_compact(self, compact: bool) -> None:
         self.box.set_margin_start(14 if compact else 20)
         self.box.set_margin_end(14 if compact else 20)
         self.box.set_spacing(16 if compact else 20)
-        self.tiles.set_max_children_per_line(2 if compact else 3)
+        self.tiles.set_column_spacing(8 if compact else 12)
+        self.tiles.set_row_spacing(8 if compact else 10)
         if hasattr(self, "media_card"):
             self.media_card.set_compact(compact)
 

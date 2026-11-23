@@ -282,22 +282,27 @@ button.tile {
   color: #%(onSurface)s;
   border-radius: 14px;
   border: 1px solid alpha(#ffffff, 0.11);
-  padding: 10px 14px;
-  min-height: 52px;
+  padding: 8px 14px;
+  min-height: 54px;
   box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: all 120ms cubic-bezier(0.2, 0, 0, 1);
+  outline: none;
 }
 button.tile:hover {
   background-color: alpha(#%(surfaceContainerHigh)s, 0.70);
-  background-image: linear-gradient(145deg, alpha(#ffffff, 0.13), alpha(#ffffff, 0.04));
-  border-color: alpha(#ffffff, 0.20);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.22), 0 4px 14px rgba(0, 0, 0, 0.14);
+  background-image: linear-gradient(145deg, alpha(#ffffff, 0.14), alpha(#ffffff, 0.04));
+  border-color: alpha(#ffffff, 0.22);
+  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.24), 0 4px 14px rgba(0, 0, 0, 0.14);
 }
 button.tile:active, button.tile.active {
   background-color: alpha(#%(primary)s, 0.22);
   background-image: none;
   border-color: alpha(#%(primary)s, 0.40);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+button.tile:focus-visible {
+  outline: 2px solid alpha(#%(primary)s, 0.65);
+  outline-offset: 2px;
 }
 .tile-title {
   font-size: 13px;
@@ -307,7 +312,7 @@ button.tile:active, button.tile.active {
 
 /* Control Center Squircle Badge */
 .tile-icon-badge {
-  min-width: 36px; min-height: 36px;
+  min-width: 38px; min-height: 38px;
   border-radius: 10px;
   background-color: #%(primary)s;
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
