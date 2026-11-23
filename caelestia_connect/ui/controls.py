@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import time
 
+import cairo
 from collections.abc import Callable
 
 from gi.repository import Adw, Gdk, GObject, Gtk
@@ -191,39 +192,55 @@ class Slider(Gtk.DrawingArea):
     def _draw(self, _area, cr, width: int, height: int) -> None:
         enabled = self.get_sensitive()
         fg = self.theme.rgba("primary") if enabled else self.theme.rgba("onSurface", 0.38)
-        bg = self.theme.rgba("outlineVariant") if enabled else self.theme.rgba("onSurface", 0.12)
+        bg = self.theme.rgba("secondaryContainer") if enabled else self.theme.rgba("onSurface", 0.1)
         cy = height / 2
-        track_h = 6.0
-        knob_r = 9.0
-        usable_w = max(1.0, width - 2 * knob_r)
-        filled_w = usable_w * min(1.0, max(0.0, self._shown))
+        track = self.track
+        filled_w = self._usable_width() * min(1.0, max(0.0, self._shown))
 
-        # Background track
-        cr.set_source_rgba(*bg)
-        _rounded_rect(
-            cr, knob_r, cy - track_h / 2, usable_w, track_h, track_h / 2, track_h / 2, track_h / 2, track_h / 2
-        )
-        cr.fill()
-
-        # Filled track
-        if filled_w > 0:
-            cr.set_source_rgba(*fg)
-            _rounded_rect(
-                cr, knob_r, cy - track_h / 2, filled_w, track_h, track_h / 2, track_h / 2, track_h / 2, track_h / 2
-            )
+        cr.set_source_rgba(*fg)
+        if self.wavy:
+            lw = int(track * 0.7)
+            amplitude = lw * 0.5
+            full = self._usable_width()
+            start, end = lw / 2, filled_w - lw / 2
+            if end > start:
+                cr.set_line_width(lw)
+                cr.set_line_cap(cairo.LINE_CAP_ROUND)
+                cr.set_line_join(cairo.LINE_JOIN_ROUND)
+                x = start
+                if self.animate_wave:
+                    cr.move_to(x, cy + amplitude * math.sin(self.frequency * 2 * math.pi * x / full + self._phase))
+                    while x < end:
+                        x = min(end, x + 1)
+                        cr.line_to(x, cy + amplitude * math.sin(self.frequency * 2 * math.pi * x / full + self._phase))
+                else:
+                    cr.move_to(start, cy)
+                    cr.line_to(end, cy)
+                cr.stroke()
+        elif filled_w > 0:
+            _rounded_rect(cr, 0, cy - track / 2, filled_w, track, self.radius, INNER_RADIUS, INNER_RADIUS, self.radius)
             cr.fill()
 
-        # Circular Apple Knob with shadow
-        kx = knob_r + filled_w
-        if enabled:
-            cr.set_source_rgba(0, 0, 0, 0.22)
-            cr.arc(kx, cy + 1.0, knob_r, 0, 2 * math.pi)
-            cr.fill()
-            cr.set_source_rgba(1.0, 1.0, 1.0, 1.0)
-        else:
-            cr.set_source_rgba(*self.theme.rgba("onSurface", 0.4))
-        cr.arc(kx, cy, knob_r, 0, 2 * math.pi)
+        hx = filled_w + GAP if filled_w > 0 else 0
+        hh = track * self._handle_mult
+        _rounded_rect(cr, hx, cy - hh / 2, HANDLE_W, hh, 2, 2, 2, 2)
+        cr.set_source_rgba(*fg)
         cr.fill()
+
+        # Remaining part, shrinking as it gets shorter, with the stop indicator at the end
+        rx = hx + HANDLE_W + GAP
+        rw = width - rx
+        if rw > 0:
+            op = min(rw, 12) / 12
+            rh = track * (op if track <= 12 else min(op * 2, 1))
+            cr.set_source_rgba(bg[0], bg[1], bg[2], bg[3] * op)
+            _rounded_rect(cr, rx, cy - rh / 2, rw, rh, INNER_RADIUS, self.radius, self.radius, INNER_RADIUS)
+            cr.fill()
+            dot = 4 * op
+            if dot > 0.5:
+                cr.set_source_rgba(fg[0], fg[1], fg[2], fg[3] * op)
+                cr.arc(width - 4 * op - dot / 2, cy, dot / 2, 0, 2 * math.pi)
+                cr.fill()
 
 
 class Switch(Gtk.DrawingArea):

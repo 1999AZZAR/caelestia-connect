@@ -6,11 +6,13 @@ from __future__ import annotations
 import math
 import time
 
+import cairo
+
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
 from ..i18n import _
 from . import widgets as w
-from .controls import Slider, _rounded_rect
+from .controls import Slider
 
 BARS = 45
 COOKIE_LOBES = 9
@@ -91,41 +93,39 @@ class CoverVisualiser(Gtk.DrawingArea):
 
     def _draw(self, _area, cr, width: int, height: int) -> None:
         cx, cy = width / 2, height / 2
-        size = self.cover
-        x0, y0 = cx - size / 2, cy - size / 2
-        r = 14.0  # Apple Music squircle corner radius
-
-        # Soft drop shadow under cover art
-        cr.set_source_rgba(0, 0, 0, 0.28)
-        _rounded_rect(cr, x0, y0 + 3.0, size, size, r, r, r, r)
-        cr.fill()
-
-        # Cover art clipping and image
-        _rounded_rect(cr, x0, y0, size, size, r, r, r, r)
+        radius = self.cover / 2
+        spacing = 12
+        max_mag = (min(width, height) - self.cover) / 2 - spacing
+        stroke = max(2.0, 360 / BARS - 2) * 0.55
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+        cr.set_line_width(stroke)
+        cr.set_source_rgba(*self.theme.rgba("primary"))
+        for i, level in enumerate(self.levels):
+            a = 2 * math.pi * i / BARS
+            start = _cookie_radius(a, radius, self.rotation) + spacing + stroke / 2
+            end = start + max(0.01, min(1.0, level)) * max_mag
+            cr.move_to(cx + start * math.cos(a), cy + start * math.sin(a))
+            cr.line_to(cx + end * math.cos(a), cy + end * math.sin(a))
+            cr.stroke()
+        self._cookie(cr, cx, cy, radius)
         if self.pixbuf is not None:
             cr.save()
             cr.clip()
-            cr.translate(x0, y0)
+            cr.translate(cx - radius, cy - radius)
             cr.scale(0.5, 0.5)
             Gdk.cairo_set_source_pixbuf(cr, self.pixbuf, 0, 0)
             cr.paint()
             cr.restore()
         else:
-            cr.set_source_rgba(*self.theme.rgba("surfaceContainerHigh"))
+            cr.set_source_rgba(*self.theme.rgba("surfaceContainerHighest"))
             cr.fill()
-            cr.set_source_rgba(*self.theme.rgba("primary"))
+            cr.set_source_rgba(*self.theme.rgba("onSurfaceVariant"))
             cr.select_font_face("Material Symbols Rounded")
-            cr.set_font_size(48)
+            cr.set_font_size(56)
             glyph = "\ue405"  # music_note
             ext = cr.text_extents(glyph)
             cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy - ext.height / 2 - ext.y_bearing)
             cr.show_text(glyph)
-
-        # Subtle 1px border stroke
-        cr.set_line_width(1.0)
-        cr.set_source_rgba(*self.theme.rgba("outlineVariant"))
-        _rounded_rect(cr, x0, y0, size, size, r, r, r, r)
-        cr.stroke()
 
 
 class MediaCard(Gtk.Box):

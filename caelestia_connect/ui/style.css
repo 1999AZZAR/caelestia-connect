@@ -100,6 +100,10 @@ headerbar {
 }
 
 /* macOS Full-Height Translucent Sidebar */
+.navigation-sidebar, list.devices {
+  --accent-bg-color: alpha(#ffffff, 0.14);
+  --accent-fg-color: #ffffff;
+}
 .navigation-sidebar {
   background-color: alpha(#%(surfaceContainerLow)s, 0.38);
   border-right: 1px solid alpha(#ffffff, 0.08);
@@ -118,11 +122,20 @@ headerbar {
   border-color: alpha(#ffffff, 0.04);
 }
 .navigation-sidebar row:selected,
+.navigation-sidebar row:selected:focus,
+.navigation-sidebar row:selected:hover,
 list.devices row:selected,
+list.devices row:selected:focus,
+list.devices row:selected:hover,
 list.devices > row:selected,
+list.devices > row:selected:focus,
+list.devices > row:selected:hover,
 .navigation-sidebar > row:selected,
-row.activatable:selected,
-list > row.activatable:selected {
+.navigation-sidebar > row:selected:focus,
+.navigation-sidebar > row:selected:hover,
+row.device-row:selected,
+row.device-row:selected:focus,
+row.device-row:selected:hover {
   background-color: alpha(#ffffff, 0.14);
   background-image: linear-gradient(180deg, alpha(#ffffff, 0.09), alpha(#ffffff, 0.02));
   border: 1px solid alpha(#ffffff, 0.14);
@@ -132,12 +145,14 @@ list > row.activatable:selected {
 .navigation-sidebar row:selected .title-medium,
 list.devices row:selected .title-medium,
 .navigation-sidebar row:selected label,
-list.devices row:selected label {
+list.devices row:selected label,
+row.device-row:selected label {
   color: #ffffff;
   font-weight: 600;
 }
 .navigation-sidebar row:selected .body-small,
-list.devices row:selected .body-small {
+list.devices row:selected .body-small,
+row.device-row:selected .body-small {
   color: alpha(#ffffff, 0.75);
 }
 .navigation-sidebar row .avatar, list.devices row .avatar {
@@ -515,23 +530,52 @@ scale.media slider {
 .media-time { font-size: 11px; font-weight: 500; color: #%(onSurfaceVariant)s; }
 
 button.media-btn {
-  min-height: 40px; min-width: 40px; padding: 0;
+  min-height: 48px; min-width: 48px; padding: 0;
   border-radius: 9999px; box-shadow: none;
-  transition: background-color 120ms ease-out;
+  border: 1px solid alpha(#ffffff, 0.10);
+  transition: border-radius 250ms cubic-bezier(0.2, 0, 0, 1), background-color 200ms ease-out;
+}
+button.media-btn:active {
+  border-radius: 12px;
 }
 button.media-tonal, button.media-side {
-  background-color: alpha(#%(onSurface)s, 0.08); color: #%(onSurface)s;
+  background-color: alpha(#%(surfaceContainerHigh)s, 0.65);
+  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
+  color: #%(onSurface)s;
 }
-button.media-side { min-width: 36px; }
-button.media-side.checked { background-color: #%(primary)s; color: #ffffff; }
+button.media-side { min-width: 44px; }
+button.media-side.checked {
+  background-color: #%(secondary)s;
+  color: #ffffff;
+  border-radius: 12px;
+}
+button.media-tonal:hover, button.media-side:hover {
+  background-color: alpha(#%(surfaceContainerHighest)s, 0.85);
+}
 button.media-play {
-  background-color: #%(primary)s; color: #ffffff;
-  min-width: 48px; min-height: 48px;
-  box-shadow: 0 2px 8px alpha(#%(primary)s, 0.35);
+  background-color: #%(primary)s;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+  color: #ffffff;
+  border: 1px solid alpha(#ffffff, 0.25);
+  box-shadow: 0 4px 14px alpha(#%(primary)s, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
+  border-radius: 9999px;
+  min-height: 48px;
 }
-button.media-play:hover { background-color: alpha(#%(primary)s, 0.88); }
+button.media-play.checked {
+  border-radius: 16px;
+  background-color: #%(primary)s;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+  color: #ffffff;
+  box-shadow: 0 4px 14px alpha(#%(primary)s, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
+}
+button.media-play:hover,
+button.media-play.checked:hover {
+  background-color: alpha(#%(primary)s, 0.90);
+}
 button.media-btn:disabled {
-  background-color: alpha(#%(onSurface)s, 0.05); color: alpha(#%(onSurface)s, 0.25);
+  background-color: alpha(#%(onSurface)s, 0.06);
+  color: alpha(#%(onSurface)s, 0.25);
+  border-color: transparent;
 }
 dropdown.player-pill > button {
   border-radius: 9999px; padding: 2px 10px; min-height: 0;

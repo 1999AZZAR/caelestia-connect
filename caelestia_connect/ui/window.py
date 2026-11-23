@@ -17,6 +17,7 @@ def _other_app_here(d: dict) -> bool:
 class DeviceRow(Gtk.ListBoxRow):
     def __init__(self, device: dict) -> None:
         super().__init__()
+        self.add_css_class("device-row")
         self.device_id = device["id"]
         box = Gtk.Box(spacing=10)
         self.icon = w.Icon("smartphone", "medium", filled=True)
