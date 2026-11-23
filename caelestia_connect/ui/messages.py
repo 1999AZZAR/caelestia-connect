@@ -161,7 +161,7 @@ class MessagesView(Gtk.Box):
             self._load_thread()
 
     def _got_conversations(self, convs: list) -> None:
-        sig = str([(c["threadId"], c["date"], c["read"]) for c in convs])
+        sig = str([(c["threadId"], c["date"], c["read"], c["title"], c["snippet"]) for c in convs])
         if sig == self._conv_sig:
             return
         self._conv_sig = sig
@@ -205,7 +205,18 @@ class MessagesView(Gtk.Box):
     def _show_messages(self, tid: str, msgs: list) -> None:
         if tid != self.thread:
             return
-        sig = str([(m["date"], m["outgoing"], len(m["body"]), [a["path"] for a in m["attachments"]]) for m in msgs])
+        sig = hash(
+            tuple(
+                (
+                    m["date"],
+                    m["outgoing"],
+                    m["body"],
+                    m["senderName"],
+                    tuple((a["uniqueId"], a["path"], a["thumbnail"]) for a in m["attachments"]),
+                )
+                for m in msgs[-300:]
+            )
+        )
         if sig == self._msg_sig:
             return
         self._msg_sig = sig

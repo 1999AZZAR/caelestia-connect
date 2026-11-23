@@ -65,7 +65,11 @@ class ShareWindow(Adw.Window):
         self.add_css_class("caelestia")
         self.app = app
         self.files = files
-        devices = [d for d in app.state.get("devices", []) if d["paired"] and d["reachable"]]
+        devices = [
+            d
+            for d in app.state.get("devices", [])
+            if d["paired"] and d["reachable"] and w.plugin_loaded(d, "share", action="share_files")
+        ]
         if device_id and files:
             target = next((d for d in devices if d["id"] == device_id), None)
             if target:
@@ -117,7 +121,9 @@ class PreferencesDialog(Adw.PreferencesDialog):
         name = Adw.EntryRow(title=_("Device name"), text=st.get("self", {}).get("name", ""), show_apply_button=True)
         name.connect("apply", lambda r: app.call("settings.setName", name=r.get_text()))
         g.add(name)
-        dl = Adw.ActionRow(title=_("Received files"), subtitle=st.get("settings", {}).get("incomingPath", ""))
+        dl = Adw.ActionRow(
+            title=_("Received files"), subtitle=GLib.markup_escape_text(st.get("settings", {}).get("incomingPath", ""))
+        )
         btn = w.icon_button("folder_open", _("Choose"))
         btn.set_valign(Gtk.Align.CENTER)
         btn.connect("clicked", lambda *_: self._pick_folder(dl))
@@ -173,9 +179,11 @@ class PreferencesDialog(Adw.PreferencesDialog):
             g3.add(row)
         fw = Adw.ActionRow(
             title=_("Firewall"),
-            subtitle=_(
-                "Ports 1714-1764 (TCP and UDP) must be open, eg: "
-                "sudo ufw allow 1714:1764/udp && sudo ufw allow 1714:1764/tcp"
+            subtitle=GLib.markup_escape_text(
+                _(
+                    "Ports 1714-1764 (TCP and UDP) must be open, eg: "
+                    "sudo ufw allow 1714:1764/udp && sudo ufw allow 1714:1764/tcp"
+                )
             ),
             subtitle_selectable=True,
         )
@@ -192,6 +200,6 @@ class PreferencesDialog(Adw.PreferencesDialog):
                 return
             if f and f.get_path():
                 self.app.call("settings.setIncomingPath", path=f.get_path())
-                row.set_subtitle(f.get_path())
+                row.set_subtitle(GLib.markup_escape_text(f.get_path()))
 
         dlg.select_folder(self.get_root(), None, done)

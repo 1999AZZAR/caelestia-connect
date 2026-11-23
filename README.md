@@ -87,6 +87,10 @@ To uninstall:
 ```
 Pairing data and configuration in `~/.config/caelestia-connect` are retained.
 
+### Experimental Rust daemon
+
+The Rust backend uses the existing Python GTK interface. It supports IPv4 discovery, pairing, file transfers, link and text sharing, battery and mobile signal status, Ping, Ring device, manual clipboard sharing, media controls in both directions, Bluetooth audio routing, SMS/MMS and contacts, notifications from the phone, and call alerts. You can run the Rust preview with a separate profile alongside the regular app. The backend guide lists the features still available through the Python daemon. [Rust backend guide](rust-daemon/README.md)
+
 ### Firewall
 
 KDE Connect discovery and data transfer use UDP and TCP ports `1714` to `1764`:

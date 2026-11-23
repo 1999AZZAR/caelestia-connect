@@ -1,7 +1,4 @@
-/* Caelestia Connect - Apple Human Interface Guidelines (macOS Sonoma / Sequoia)
-   Refined first-party desktop aesthetics: Inset Grouped sections, Control Center squircle tiles,
-   macOS sidebar source lists, segmented control navigation, authentic Apple typography,
-   and multi-layered glassmorphic acrylic depth with subtle specular lighting. */
+/* Caelestia Connect desktop theme */
 
 :root {
   --accent-bg-color: #%(primary)s;
@@ -44,13 +41,10 @@ window, .background {
   font-family: %(sans)s;
 }
 
-/* macOS Window Frame (Glassmorphic Acrylic Vibrancy) */
 window.caelestia {
-  background-color: alpha(#%(background)s, 0.80);
+  background-color: alpha(#%(background)s, 0.96);
   color: #%(onSurface)s;
   border-radius: var(--window-radius);
-  border: 1px solid alpha(#ffffff, 0.14);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), inset 0 1px 0 0 alpha(#ffffff, 0.16);
 }
 
 /* Iconography with Apple System proportions */
@@ -76,7 +70,7 @@ window.caelestia {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  color: alpha(#%(onSurfaceVariant)s, 0.75);
+  color: #%(onSurfaceVariant)s;
   letter-spacing: 0.6px;
 }
 .section-title {
@@ -84,154 +78,92 @@ window.caelestia {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  color: alpha(#%(onSurfaceVariant)s, 0.75);
+  color: #%(onSurfaceVariant)s;
 }
 .dim { color: #%(onSurfaceVariant)s; }
 .primary-text { color: #%(primary)s; }
 .error-text { color: #%(error)s; }
 
-/* Unified Translucent Toolbar / Headerbar */
 headerbar {
-  background-color: alpha(#%(surfaceContainerLow)s, 0.50);
-  border-bottom: 1px solid alpha(#ffffff, 0.08);
+  background-color: alpha(#%(surfaceContainerLow)s, 0.62);
+  border-bottom: 1px solid alpha(#%(onSurface)s, 0.09);
   box-shadow: none;
-  min-height: 48px;
+  min-height: 50px;
   padding: 0 10px;
 }
+.sidebar-title { font-size: 14px; font-weight: 650; }
 
-/* macOS Full-Height Translucent Sidebar */
-.navigation-sidebar, list.devices {
-  --accent-bg-color: alpha(#ffffff, 0.14);
-  --accent-fg-color: #ffffff;
-}
-.navigation-sidebar {
-  background-color: alpha(#%(surfaceContainerLow)s, 0.38);
-  border-right: 1px solid alpha(#ffffff, 0.08);
-}
-.navigation-sidebar row, list.devices row {
+list.devices { background: transparent; }
+list.devices row {
   border-radius: 10px;
-  margin: 2px 8px;
+  margin: 2px 12px;
   padding: 7px 10px;
-  min-height: 44px;
-  transition: all 120ms cubic-bezier(0.2, 0, 0, 1);
-  background-color: transparent;
+  min-height: 40px;
+  background: transparent;
   border: 1px solid transparent;
+  color: #%(onSurface)s;
 }
-.navigation-sidebar row:hover, list.devices row:hover {
-  background-color: alpha(#ffffff, 0.06);
-  border-color: alpha(#ffffff, 0.04);
+list.devices row:hover { background-color: alpha(#%(onSurface)s, 0.06); }
+list.devices > row.device-row:selected,
+list.devices > row.device-row:selected:hover,
+list.devices > row.device-row:selected:focus {
+  background: alpha(#%(primary)s, 0.14);
+  border-color: alpha(#%(primary)s, 0.28);
+  color: #%(onSurface)s;
+  box-shadow: none;
 }
-.navigation-sidebar row:selected,
-.navigation-sidebar row:selected:focus,
-.navigation-sidebar row:selected:hover,
-list.devices row:selected,
-list.devices row:selected:focus,
-list.devices row:selected:hover,
-list.devices > row:selected,
-list.devices > row:selected:focus,
-list.devices > row:selected:hover,
-.navigation-sidebar > row:selected,
-.navigation-sidebar > row:selected:focus,
-.navigation-sidebar > row:selected:hover,
-row.device-row:selected,
-row.device-row:selected:focus,
-row.device-row:selected:hover {
-  background-color: alpha(#ffffff, 0.14);
-  background-image: linear-gradient(180deg, alpha(#ffffff, 0.09), alpha(#ffffff, 0.02));
-  border: 1px solid alpha(#ffffff, 0.14);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.18), 0 2px 6px rgba(0, 0, 0, 0.15);
-  color: #ffffff;
+list.devices > row.device-row:selected .title-medium { font-weight: 650; }
+list.devices > row.device-row:selected .body-small { color: #%(onSurfaceVariant)s; }
+
+popover.connect-menu > contents {
+  padding: 5px;
+  background-color: alpha(#%(surfaceContainer)s, 0.99);
+  border: 1px solid alpha(#%(onSurface)s, 0.13);
+  border-radius: 12px;
 }
-.navigation-sidebar row:selected .title-medium,
-list.devices row:selected .title-medium,
-.navigation-sidebar row:selected label,
-list.devices row:selected label,
-row.device-row:selected label {
-  color: #ffffff;
-  font-weight: 600;
+popover.connect-menu modelbutton {
+  padding: 6px 10px;
+  min-height: 26px;
+  border-radius: 7px;
 }
-.navigation-sidebar row:selected .body-small,
-list.devices row:selected .body-small,
-row.device-row:selected .body-small {
-  color: alpha(#ffffff, 0.75);
-}
-.navigation-sidebar row .avatar, list.devices row .avatar {
-  border-radius: 8px;
-  min-width: 32px; min-height: 32px;
-  background-color: alpha(#%(onSurface)s, 0.08);
-  border: 1px solid alpha(#ffffff, 0.08);
-  color: #%(onSurfaceVariant)s;
-}
-.navigation-sidebar row .avatar.connected, list.devices row .avatar.connected {
-  background-color: #%(primary)s;
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
-  color: #ffffff;
-  border: 1px solid alpha(#ffffff, 0.25);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
-}
-.navigation-sidebar row .avatar.offline, list.devices row .avatar.offline {
-  background-color: alpha(#%(onSurface)s, 0.1);
-  color: #%(onSurfaceVariant)s;
-  border: 1px solid alpha(#ffffff, 0.05);
-}
+popover.connect-menu modelbutton:hover { background-color: alpha(#%(onSurface)s, 0.08); }
+
 list.flat { background: transparent; }
 list.flat row { border-radius: 10px; }
 
-/* Host Card ("This PC" - Frosted Glass Profile Plate) */
 .host-card {
-  background-color: alpha(#%(surfaceContainer)s, 0.45);
-  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
+  background-color: alpha(#%(surfaceContainer)s, 0.65);
   border-radius: 12px;
-  border: 1px solid alpha(#ffffff, 0.10);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
-  padding: 10px 12px;
-}
-.host-card .avatar {
-  border-radius: 8px;
-  min-width: 32px; min-height: 32px;
-  background: linear-gradient(135deg, #%(primary)s, #%(secondary)s);
-  border: 1px solid alpha(#ffffff, 0.25);
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
+  border: 1px solid alpha(#%(onSurface)s, 0.08);
+  padding: 9px 10px;
 }
 
-/* Inset Grouped Surfaces & Cards (Frosted Glass Acrylic) */
-.surface-card {
-  background-color: alpha(#%(surfaceContainer)s, 0.50);
-  background-image: linear-gradient(145deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
-  border-radius: 18px;
-  border: 1px solid alpha(#ffffff, 0.11);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.18), 0 6px 20px rgba(0, 0, 0, 0.14);
-  padding: 18px 20px;
+.surface-card, .media-card {
+  background-color: alpha(#%(surfaceContainer)s, 0.96);
+  border-radius: 16px;
+  border: 1px solid alpha(#%(onSurface)s, 0.10);
+  padding: 16px 18px;
 }
-.surface-card.high {
-  background-color: alpha(#%(surfaceContainerHigh)s, 0.65);
-  background-image: linear-gradient(145deg, alpha(#ffffff, 0.10), alpha(#ffffff, 0.03));
-  border-color: alpha(#ffffff, 0.14);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.22), 0 8px 24px rgba(0, 0, 0, 0.18);
-}
+.surface-card.high { background-color: alpha(#%(surfaceContainerHigh)s, 0.96); }
 .surface-card.tight { padding: 12px 14px; }
 
-/* Device Hero Section (Frosted AirDrop Glass) */
 .hero {
-  background-color: alpha(#%(surfaceContainer)s, 0.52);
-  background-image: linear-gradient(145deg, alpha(#ffffff, 0.09), alpha(#ffffff, 0.02));
-  border-radius: 18px;
-  border: 1px solid alpha(#ffffff, 0.13);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.20), 0 8px 24px rgba(0, 0, 0, 0.16);
-  padding: 20px 22px;
+  background-color: alpha(#%(surfaceContainer)s, 0.98);
+  background-image: linear-gradient(115deg, alpha(#%(primary)s, 0.13), alpha(#%(primary)s, 0.02));
+  border-radius: 19px;
+  border: 1px solid alpha(#%(onSurface)s, 0.11);
+  padding: 19px 20px;
 }
+.device-title { font-size: 26px; font-weight: 700; letter-spacing: -0.55px; }
 .hero-icon {
-  background: linear-gradient(135deg, #%(primary)s, #%(secondary)s);
-  color: #ffffff;
-  border-radius: 14px;
+  background-color: alpha(#%(primary)s, 0.17);
+  color: #%(onSurface)s;
+  border-radius: 15px;
   min-width: 56px; min-height: 56px;
-  border: 1px solid alpha(#ffffff, 0.25);
-  box-shadow: 0 4px 14px alpha(#%(primary)s, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
+  border: 1px solid alpha(#%(primary)s, 0.22);
 }
-.hero-icon .material-icon {
-  font-size: 32px;
-}
+.hero-icon .material-icon { font-size: 30px; }
+
 .avatar {
   background-color: #%(surfaceContainerHigh)s;
   color: #%(onSurfaceVariant)s;
@@ -248,92 +180,61 @@ list.flat row { border-radius: 10px; }
   color: #%(onSurfaceVariant)s;
 }
 
-/* Apple Status Pills (Translucent Glass Badges) */
 .pill {
-  border-radius: 9999px;
-  padding: 3px 12px;
-  background-color: alpha(#%(onSurface)s, 0.08);
-  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.01));
-  color: #%(onSurfaceVariant)s;
+  border-radius: 7px;
+  padding: 3px 7px;
+  background-color: alpha(#%(onSurface)s, 0.06);
+  color: #%(onSurface)s;
   font-size: 11px;
-  font-weight: 500;
-  border: 1px solid alpha(#ffffff, 0.09);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.10);
+  font-weight: 550;
 }
-.pill.ok {
-  background-color: alpha(#%(success)s, 0.16);
-  background-image: linear-gradient(180deg, alpha(#ffffff, 0.12), alpha(#ffffff, 0));
-  border-color: alpha(#%(success)s, 0.35);
-  color: #%(success)s;
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 2px 6px alpha(#%(success)s, 0.18);
-}
-.pill.warn {
-  background-color: alpha(#%(error)s, 0.16);
-  background-image: linear-gradient(180deg, alpha(#ffffff, 0.12), alpha(#ffffff, 0));
-  border-color: alpha(#%(error)s, 0.35);
-  color: #%(error)s;
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 2px 6px alpha(#%(error)s, 0.18);
-}
+.pill.ok { background-color: alpha(#%(success)s, 0.16); }
+.pill.warn { background-color: alpha(#%(error)s, 0.14); }
 
-/* Quick Action Tiles (Control Center Frosted Acrylic Cards) */
-button.tile {
-  background-color: alpha(#%(surfaceContainer)s, 0.50);
-  background-image: linear-gradient(145deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
-  color: #%(onSurface)s;
-  border-radius: 14px;
-  border: 1px solid alpha(#ffffff, 0.11);
-  padding: 8px 14px;
-  min-height: 54px;
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 120ms cubic-bezier(0.2, 0, 0, 1);
-  outline: none;
+.overview-heading { font-size: 17px; font-weight: 680; }
+.action-group {
+  background-color: alpha(#%(surfaceContainer)s, 0.94);
+  border: 1px solid alpha(#%(onSurface)s, 0.10);
+  border-radius: 15px;
+  padding: 8px;
 }
-button.tile:hover {
-  background-color: alpha(#%(surfaceContainerHigh)s, 0.70);
-  background-image: linear-gradient(145deg, alpha(#ffffff, 0.14), alpha(#ffffff, 0.04));
-  border-color: alpha(#ffffff, 0.22);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.24), 0 4px 14px rgba(0, 0, 0, 0.14);
+.action-group-title {
+  color: #%(onSurfaceVariant)s;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 4px 8px 3px;
 }
-button.tile:active, button.tile.active {
-  background-color: alpha(#%(primary)s, 0.22);
-  background-image: none;
-  border-color: alpha(#%(primary)s, 0.40);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-button.tile:focus-visible {
-  outline: 2px solid alpha(#%(primary)s, 0.65);
-  outline-offset: 2px;
-}
-.tile-title {
-  font-size: 13px;
-  font-weight: 500;
+.action-hint { color: #%(onSurfaceVariant)s; font-size: 13px; padding: 4px 0; }
+button.action-row {
+  min-height: 42px;
+  padding: 0 8px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
   color: #%(onSurface)s;
 }
-
-/* Control Center Squircle Badge */
-.tile-icon-badge {
-  min-width: 38px; min-height: 38px;
-  border-radius: 10px;
-  background-color: #%(primary)s;
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
-  color: #ffffff;
-  border: 1px solid alpha(#ffffff, 0.22);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), inset 0 1px 0 0 rgba(255, 255, 255, 0.32);
+button.action-row:hover { background-color: alpha(#%(onSurface)s, 0.07); }
+button.action-row:active { background-color: alpha(#%(onSurface)s, 0.14); }
+button.action-row:focus-visible {
+  outline: 2px solid #%(primary)s;
+  outline-offset: -2px;
 }
-.tile-icon-badge .material-icon {
-  color: #ffffff;
-  font-size: 20px;
+button.action-row:disabled { opacity: 0.55; }
+button.action-row.session-active {
+  background-color: alpha(#%(primary)s, 0.14);
+  border-color: alpha(#%(primary)s, 0.28);
 }
-.tile-icon-badge.accent-blue { background-color: #0A84FF; }
-.tile-icon-badge.accent-green { background-color: #30D158; }
-.tile-icon-badge.accent-orange { background-color: #FF9F0A; }
-.tile-icon-badge.accent-yellow { background-color: #FFD60A; color: #1c1c1e; }
-.tile-icon-badge.accent-yellow .material-icon { color: #1c1c1e; }
-.tile-icon-badge.accent-purple { background-color: #BF5AF2; }
-.tile-icon-badge.accent-indigo { background-color: #5E5CE6; }
-.tile-icon-badge.accent-teal { background-color: #64D2FF; color: #1c1c1e; }
-.tile-icon-badge.accent-teal .material-icon { color: #1c1c1e; }
-.tile-icon-badge.accent-red { background-color: #FF453A; }
+button.action-row.session-active:hover { background-color: alpha(#%(primary)s, 0.22); }
+button.action-row.session-active:active { background-color: alpha(#%(primary)s, 0.30); }
+.action-label { font-size: 13px; font-weight: 550; }
+.action-icon {
+  min-width: 26px; min-height: 26px;
+  border-radius: 7px;
+  background-color: alpha(#%(onSurface)s, 0.07);
+}
+button.action-row.session-active .action-icon { background-color: alpha(#%(primary)s, 0.22); }
+.action-arrow { color: #%(onSurfaceVariant)s; }
 
 /* Apple Native Buttons (Frosted Acrylic Sheen) */
 button.filled, button.suggested-action {
@@ -398,7 +299,7 @@ preferencesgroup > box > label.title {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  color: alpha(#%(onSurfaceVariant)s, 0.75);
+  color: #%(onSurfaceVariant)s;
   margin-left: 6px;
   margin-bottom: 8px;
 }
@@ -463,50 +364,39 @@ button.expand-arrow { min-width: 28px; min-height: 28px; margin-right: 2px; }
 button.expand-arrow .material-icon { transition: transform 200ms cubic-bezier(0.2, 0, 0, 1); }
 button.expand-arrow.expanded .material-icon { transform: rotate(180deg); }
 
-/* Apple Segmented Control (Frosted Acrylic Capsule) */
 viewswitcher, .view-switcher {
-  background-color: alpha(#000000, 0.22);
-  background-image: linear-gradient(180deg, alpha(#000000, 0.12), alpha(#000000, 0.04));
-  border-radius: 10px;
+  background-color: alpha(#%(onSurface)s, 0.06);
+  border-radius: 11px;
   padding: 3px;
   margin: 3px 0;
-  border: 1px solid alpha(#ffffff, 0.07);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
 }
 viewswitcher button, .view-switcher button {
-  border-radius: 7px;
-  padding: 4px 14px;
-  min-height: 28px;
+  border-radius: 8px;
+  padding: 4px 12px;
+  min-height: 30px;
   font-size: 13px;
-  font-weight: 500;
-  color: alpha(#%(onSurface)s, 0.72);
+  font-weight: 550;
+  color: #%(onSurfaceVariant)s;
   background: transparent;
   border: 1px solid transparent;
   box-shadow: none;
-  transition: all 120ms ease-out;
 }
 viewswitcher button:hover, .view-switcher button:hover {
   color: #%(onSurface)s;
-  background-color: alpha(#ffffff, 0.06);
+  background-color: alpha(#%(onSurface)s, 0.06);
 }
 viewswitcher button:checked, .view-switcher button:checked {
-  background-color: alpha(#ffffff, 0.18);
-  background-image: linear-gradient(180deg, alpha(#ffffff, 0.14), alpha(#ffffff, 0.03));
-  color: #ffffff;
-  font-weight: 600;
-  border: 1px solid alpha(#ffffff, 0.18);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22), inset 0 1px 0 0 alpha(#ffffff, 0.22);
+  background-color: alpha(#%(primary)s, 0.13);
+  color: #%(onSurface)s;
+  font-weight: 650;
+  border-color: alpha(#%(primary)s, 0.22);
 }
 
-/* Apple Music Now Playing Card (Frosted Glass Plate) */
-.media-card {
-  padding: 20px;
-  border-radius: 16px;
-  background-color: alpha(#%(surfaceContainer)s, 0.52);
-  background-image: linear-gradient(180deg, alpha(#ffffff, 0.08), alpha(#ffffff, 0.02));
-  border: 1px solid alpha(#ffffff, 0.12);
-  box-shadow: inset 0 1px 0 0 alpha(#ffffff, 0.16), 0 6px 20px rgba(0, 0, 0, 0.12);
+viewswitcherbar viewswitcher button {
+  padding: 4px 2px;
+  font-size: 12px;
 }
+
 .media-art {
   border-radius: 14px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30), inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
@@ -564,6 +454,7 @@ button.media-play {
   border: 1px solid alpha(#ffffff, 0.25);
   box-shadow: 0 4px 14px alpha(#%(primary)s, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
   border-radius: 9999px;
+  min-width: 56px;
   min-height: 48px;
 }
 button.media-play.checked {

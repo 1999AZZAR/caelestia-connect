@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from gi.repository import Adw, Gio, Gtk, Pango
 
@@ -12,17 +14,28 @@ from . import widgets as w
 from . import mirroring
 
 
+@dataclass(frozen=True)
+class QuickAction:
+    id: str
+    icon: str
+    label: str
+    run: Callable[[], None]
+    tooltip: str = ""
+    opens_view: bool = False
+    active: bool = False
+
+
 class Overview(Gtk.ScrolledWindow):
     def __init__(self, app, page) -> None:
         super().__init__(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         self.app = app
         self.page = page
         self.device: dict = {}
-        clamp = Adw.Clamp(maximum_size=860, tightening_threshold=600)
+        clamp = Adw.Clamp(maximum_size=1080, tightening_threshold=900)
         self.box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=20,
-            margin_top=12,
+            margin_top=20,
             margin_bottom=28,
             margin_start=20,
             margin_end=20,
@@ -31,15 +44,16 @@ class Overview(Gtk.ScrolledWindow):
         self.set_child(clamp)
         self._sigs: dict[str, str] = {}
 
-        hero = Gtk.Box(spacing=18)
+        hero = Gtk.Box(spacing=16)
         hero.add_css_class("hero")
         self.hero_icon = w.Icon("smartphone", "large", filled=True)
         hero.append(w.circle(self.hero_icon, "hero-icon"))
         col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, valign=Gtk.Align.CENTER, hexpand=True)
-        self.hero_name = w.label(css=["headline"], ellipsize=True)
+        self.hero_name = w.label(css=["device-title"], ellipsize=True)
         col.append(self.hero_name)
         self.pills = Gtk.FlowBox(
             selection_mode=Gtk.SelectionMode.NONE,
+            halign=Gtk.Align.START,
             max_children_per_line=6,
             column_spacing=6,
             row_spacing=6,
@@ -49,13 +63,21 @@ class Overview(Gtk.ScrolledWindow):
         hero.append(col)
         self.box.append(hero)
 
-        self.tiles = Gtk.Grid(
-            column_spacing=12,
-            row_spacing=10,
-            column_homogeneous=True,
-            hexpand=True,
-        )
-        self.box.append(self.tiles)
+        actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        actions.append(w.label(_("Quick actions"), css=["overview-heading"]))
+        self.action_columns = Gtk.Box(spacing=10, homogeneous=True)
+        self.action_columns.add_css_class("action-columns")
+        self.action_groups = [self._action_group(title) for title in (_("Sharing"), _("Screen & input"), _("Device"))]
+        actions.append(self.action_columns)
+        self.action_hint = w.label(wrap=True, css=["action-hint"])
+        self.scan_button = w.text_button(_("Search again"), "refresh", ["tonal"], lambda: self.app.call("refresh"))
+        self.scan_button.set_halign(Gtk.Align.START)
+        self.action_unavailable = w.card(css=["tight"])
+        self.action_unavailable.append(self.action_hint)
+        self.action_unavailable.append(self.scan_button)
+        actions.append(self.action_unavailable)
+        self.action_buttons: dict[str, w.ActionButton] = {}
+        self.box.append(actions)
 
         self.media = Gtk.Box()
         self.box.append(self.media)
@@ -73,6 +95,15 @@ class Overview(Gtk.ScrolledWindow):
         self.files = w.card()
         self.box.append(self.files)
 
+    def _action_group(self, title: str) -> tuple[Gtk.Box, Gtk.Box]:
+        group = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        group.add_css_class("action-group")
+        group.append(w.label(title, css=["action-group-title"], wrap=True))
+        rows = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        group.append(rows)
+        self.action_columns.append(group)
+        return group, rows
+
     def _act(self, plugin: str, action: str, toast: str | None = None, **args):
         def run():
             self.app.plugin(
@@ -85,103 +116,179 @@ class Overview(Gtk.ScrolledWindow):
 
         return run
 
-    def _rebuild_tiles(self) -> None:
+    def _quick_actions(self) -> tuple[list[QuickAction], list[QuickAction], list[QuickAction]]:
         d = self.device
-        tiles = []
-        if w.plugin_loaded(self.device, "ping"):
-            tiles.append(("notifications_active", _("Ping"), self._act("ping", "ping", _("Ping sent"))))
-        if w.plugin_loaded(self.device, "findmyphone"):
-            tiles.append(
-                ("ring_volume", _("Ring"), self._act("findmyphone", "ring", _("Ringing {name}").format(name=d["name"])))
+        plugins = {p["id"] for p in d.get("plugins", []) if p["loaded"]}
+        sharing, screen, device = [], [], []
+        if w.plugin_loaded(d, "share", action="share_files"):
+            sharing.append(QuickAction("send-files", "upload_file", _("Send files…"), self.page.pick_files))
+        if w.plugin_loaded(d, "share", action="share_text") and w.plugin_loaded(d, "share", action="share_url"):
+            sharing.append(QuickAction("send-text", "link", _("Send link or text…"), self.page.send_text_dialog))
+        if "clipboard" in plugins:
+            sharing.append(
+                QuickAction(
+                    "clipboard",
+                    "content_paste_go",
+                    _("Send clipboard"),
+                    self._act("clipboard", "send_clipboard", _("Clipboard sent")),
+                )
             )
-        if w.plugin_loaded(self.device, "share"):
-            tiles.append(("upload_file", _("Send files"), self.page.pick_files))
-            tiles.append(("link", _("Send link/text"), self.page.send_text_dialog))
-        if w.plugin_loaded(self.device, "clipboard"):
-            tiles.append(
-                ("content_paste_go", _("Send clipboard"), self._act("clipboard", "send_clipboard", _("Clipboard sent")))
-            )
-        if w.plugin_loaded(self.device, "sftp"):
-            tiles.append(("folder_open", _("Browse files"), self._browse))
-        if w.plugin_loaded(self.device, "remotecontrol") or w.plugin_loaded(self.device, "remotekeyboard"):
-            tiles.append(("mouse", _("Remote input"), lambda: self.page.show_page("remote")))
+        if "sftp" in plugins:
+            sharing.append(QuickAction("browse", "folder_open", _("Browse files"), self._browse))
+
         android = d["state"].get("android", {})
-        if w.plugin_loaded(self.device, "android") and android.get("tools"):
+        if "android" in plugins and android.get("tools"):
             if android.get("mirroring"):
-                tiles.append(("stop_screen_share", _("Stop mirroring"), self._act("android", "stop_mirror")))
+                screen.append(
+                    QuickAction(
+                        "mirror",
+                        "stop_screen_share",
+                        _("Stop mirroring"),
+                        self._act("android", "stop_mirror"),
+                        active=True,
+                    )
+                )
                 screen_on = android.get("screenOn", True)
                 caption = _("Turn screen off") if screen_on else _("Turn screen on")
                 tip = _("Turn screen off (Alt+O)") if screen_on else _("Turn screen on (Alt+Shift+O)")
-                tiles.append(
-                    (
+                screen.append(
+                    QuickAction(
+                        "screen-power",
                         "screen_lock_portrait" if screen_on else "mobile_lock_portrait",
                         caption,
                         self._act("android", "toggle_screen"),
-                        tip,
+                        tooltip=tip,
                     )
                 )
             else:
-                tiles.append(
-                    (
+                screen.append(
+                    QuickAction(
+                        "mirror",
                         "screen_share",
-                        _("Mirror screen"),
+                        _("Mirror screen…"),
                         lambda: mirroring.show(self.app, self.page.window, self.device),
                     )
                 )
             if android.get("preview"):
-                tiles.append(("no_photography", _("Stop camera"), self._act("android", "stop_camera")))
+                screen.append(
+                    QuickAction(
+                        "camera",
+                        "no_photography",
+                        _("Stop camera"),
+                        self._act("android", "stop_camera"),
+                        active=True,
+                    )
+                )
             else:
-                tiles.append(
-                    (
+                screen.append(
+                    QuickAction(
+                        "camera",
                         "photo_camera",
-                        _("Phone camera"),
+                        _("Phone camera…"),
                         lambda: mirroring.show(self.app, self.page.window, self.device, True),
                     )
                 )
-        if w.plugin_loaded(self.device, "sms"):
-            tiles.append(("sms", _("Messages"), lambda: self.page.show_page("messages")))
-        if w.plugin_loaded(self.device, "lockdevice"):
+        if plugins & {"remotecontrol", "remotekeyboard"}:
+            screen.append(
+                QuickAction(
+                    "remote",
+                    "mouse",
+                    _("Remote input"),
+                    lambda: self.page.show_page("remote"),
+                    opens_view=True,
+                )
+            )
+        if "virtualmonitor" in plugins:
+            monitor = d["state"].get("virtualmonitor", {})
+            if monitor.get("active"):
+                screen.append(
+                    QuickAction(
+                        "extend",
+                        "desktop_access_disabled",
+                        _("Stop extending"),
+                        self._act("virtualmonitor", "stop"),
+                        active=True,
+                    )
+                )
+            elif monitor.get("available"):
+                screen.append(QuickAction("extend", "desktop_windows", _("Extend display"), self._extend_display))
+
+        if "findthisdevice" in plugins and d["state"].get("findthisdevice", {}).get("ringing"):
+            device.append(
+                QuickAction(
+                    "stop-ringing",
+                    "volume_off",
+                    _("Stop ringing"),
+                    self._act("findthisdevice", "stop"),
+                    active=True,
+                )
+            )
+        if "findmyphone" in plugins:
+            device.append(
+                QuickAction(
+                    "ring",
+                    "ring_volume",
+                    _("Ring device"),
+                    self._act("findmyphone", "ring", _("Ringing {name}").format(name=d["name"])),
+                )
+            )
+        if "ping" in plugins:
+            device.append(
+                QuickAction("ping", "notifications_active", _("Ping"), self._act("ping", "ping", _("Ping sent")))
+            )
+        if "sms" in plugins:
+            device.append(
+                QuickAction(
+                    "messages",
+                    "sms",
+                    _("Messages"),
+                    lambda: self.page.show_page("messages"),
+                    opens_view=True,
+                )
+            )
+        if "lockdevice" in plugins:
             locked = d["state"].get("lockdevice", {}).get("remoteLocked")
-            tiles.append(
-                (
+            device.append(
+                QuickAction(
+                    "lock",
                     "lock_open" if locked else "lock",
                     _("Unlock") if locked else _("Lock"),
                     self._act("lockdevice", "set_locked", locked=not locked),
                 )
             )
-        if w.plugin_loaded(self.device, "virtualmonitor"):
-            monitor = d["state"].get("virtualmonitor", {})
-            if monitor.get("active"):
-                tiles.append(("desktop_access_disabled", _("Stop extending"), self._act("virtualmonitor", "stop")))
-            elif monitor.get("available"):
-                tiles.append(("desktop_windows", _("Extend display"), self._extend_display))
-        if w.plugin_loaded(self.device, "findthisdevice") and d["state"].get("findthisdevice", {}).get("ringing"):
-            tiles.append(("volume_off", _("Stop ringing"), self._act("findthisdevice", "stop")))
-        sig = w.signature([(t[0], t[1]) for t in tiles])
-        if self._sigs.get("tiles") == sig:
-            return
-        self._sigs["tiles"] = sig
-        w.clear(self.tiles)
-        n = len(tiles)
-        for i, item in enumerate(tiles):
-            icon, text, cb = item[0], item[1], item[2]
-            tip = item[3] if len(item) > 3 else ""
-            tile = w.Tile(icon, text, cb, tooltip=tip)
-            tile.set_hexpand(True)
-            if n % 2 == 1 and i == n - 1:
-                row = i // 2
-                self.tiles.attach(tile, 0, row, 2, 1)
-            else:
-                col = i % 2
-                row = i // 2
-                self.tiles.attach(tile, col, row, 1, 1)
+        return sharing, screen, device
+
+    def _update_actions(self) -> None:
+        groups = self._quick_actions()
+        expected = {action.id for actions in groups for action in actions}
+        for action_id in self.action_buttons.keys() - expected:
+            button = self.action_buttons.pop(action_id)
+            button.get_parent().remove(button)
+        for (group, rows), actions in zip(self.action_groups, groups, strict=True):
+            group.set_visible(bool(actions))
+            previous = None
+            for action in actions:
+                button = self.action_buttons.get(action.id)
+                if button is None:
+                    button = self.action_buttons[action.id] = w.ActionButton()
+                    rows.insert_child_after(button, previous)
+                button.update(action.icon, action.label, action.run, action.tooltip, action.opens_view, action.active)
+                previous = button
+        reachable = self.device["reachable"]
+        self.action_columns.set_visible(bool(expected))
+        self.action_columns.set_sensitive(reachable)
+        self.action_hint.set_label(
+            _("Reconnect this device to use its controls.") if not reachable else _("No quick actions available.")
+        )
+        self.action_unavailable.set_visible(not (reachable and expected))
+        self.scan_button.set_visible(not reachable)
 
     def set_compact(self, compact: bool) -> None:
         self.box.set_margin_start(14 if compact else 20)
         self.box.set_margin_end(14 if compact else 20)
         self.box.set_spacing(16 if compact else 20)
-        self.tiles.set_column_spacing(8 if compact else 12)
-        self.tiles.set_row_spacing(8 if compact else 10)
+        self.action_columns.set_orientation(Gtk.Orientation.VERTICAL if compact else Gtk.Orientation.HORIZONTAL)
+        self.action_columns.set_homogeneous(not compact)
         if hasattr(self, "media_card"):
             self.media_card.set_compact(compact)
 
@@ -195,7 +302,7 @@ class Overview(Gtk.ScrolledWindow):
     def _browse(self) -> None:
         sftp = self.device["state"].get("sftp", {})
         if not sftp.get("available", True):
-            self.app.toast(_("Install sshfs to browse the device's files (sudo pacman -S sshfs)"))
+            self.app.toast(_("Install sshfs to browse files on this device."))
             return
         self.app.toast(_("Mounting {name}…").format(name=self.device["name"]))
         self.app.plugin(
@@ -454,7 +561,7 @@ class Overview(Gtk.ScrolledWindow):
         else:
             pills.append((_("Disconnected"), "warn"))
         batt = d["state"].get("battery")
-        if batt and batt.get("charge", -1) >= 0:
+        if d["reachable"] and batt and batt.get("charge", -1) >= 0:
             pills.append(
                 (
                     f"{batt['charge']}%" + (" · " + _("charging") if batt["charging"] else ""),
@@ -462,11 +569,11 @@ class Overview(Gtk.ScrolledWindow):
                 )
             )
         conn = d["state"].get("connectivity_report")
-        if conn and conn.get("strength", -1) >= 0:
+        if d["reachable"] and conn and conn.get("strength", -1) >= 0:
             net = conn["networkType"] if conn["networkType"] not in ("", "Unknown") else _("Mobile")
             pills.append((f"{net} · {'▂▄▆█'[: max(1, conn['strength'])]}", ""))
         call = d["state"].get("telephony", {}).get("call")
-        if call:
+        if d["reachable"] and call:
             pills.append(
                 ((_("Call") + ": " + call.get("contact", "")) if call.get("contact") else _("In a call"), "ok")
             )
@@ -476,7 +583,7 @@ class Overview(Gtk.ScrolledWindow):
             self.pills.remove_all()
             for text, kind in pills:
                 self.pills.append(w.pill(text, kind))
-        self._rebuild_tiles()
+        self._update_actions()
         self._update_media()
         self._update_transfers(state)
         self._update_notifications()

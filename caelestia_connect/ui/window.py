@@ -67,8 +67,12 @@ class DeviceRow(Gtk.ListBoxRow):
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, app) -> None:
-        super().__init__(application=app, title=_("Caelestia Connect"))
+        preview = getattr(app, "rust_preview", False)
+        super().__init__(
+            application=app, title=_("Caelestia Connect Rust Preview") if preview else _("Caelestia Connect")
+        )
         self.app = app
+        self.rust_preview = preview
         self.add_css_class("caelestia")
         self.set_default_size(1100, 760)
         self.set_size_request(360, 480)
@@ -86,7 +90,7 @@ class MainWindow(Adw.ApplicationWindow):
         bp.connect("apply", lambda *_: self.device_page.set_narrow(True))
         bp.connect("unapply", lambda *_: self.device_page.set_narrow(False))
         self.add_breakpoint(bp)
-        bp_small = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 560sp"))
+        bp_small = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 640sp"))
         bp_small.add_setter(self.split, "collapsed", True)
         bp_small.connect("apply", lambda *_: (self.device_page.set_narrow(True), self.device_page.set_compact(True)))
         bp_small.connect(
@@ -119,16 +123,23 @@ class MainWindow(Adw.ApplicationWindow):
         page = Adw.NavigationPage(title=_("Connect"), tag="sidebar")
         tv = Adw.ToolbarView()
         hb = Adw.HeaderBar()
-        hb.set_title_widget(w.label(_("Connect"), css=["title-medium"]))
+        hb.set_title_widget(w.label(_("Rust Preview") if self.rust_preview else _("Connect"), css=["sidebar-title"]))
         refresh = w.icon_button("refresh", _("Search for devices"), callback=lambda: self.app.call("refresh"))
         hb.pack_start(refresh)
         menu = Gio.Menu()
-        menu.append(_("Preferences"), "app.preferences")
-        menu.append(_("Add device by IP"), "win.add-ip")
-        menu.append(_("About"), "app.about")
-        menu.append(_("Quit"), "app.quit")
+        discovery = Gio.Menu()
+        discovery.append(_("Add device by IP…"), "win.add-ip")
+        menu.append_section(None, discovery)
+        application = Gio.Menu()
+        application.append(_("Preferences…"), "app.preferences")
+        application.append(_("About"), "app.about")
+        application.append(_("Quit"), "app.quit")
+        menu.append_section(None, application)
         mb = Gtk.MenuButton(menu_model=menu)
-        mb.set_child(w.Icon("more_vert", "medium"))
+        mb.set_child(w.Icon("more_horiz", "medium"))
+        mb.set_tooltip_text(_("Application menu"))
+        mb.update_property([Gtk.AccessibleProperty.LABEL], [_("Application menu")])
+        mb.get_popover().add_css_class("connect-menu")
         mb.add_css_class("flat")
         mb.add_css_class("round")
         hb.pack_end(mb)
@@ -226,7 +237,7 @@ class MainWindow(Adw.ApplicationWindow):
             return
         me = state["self"]
         self.self_name.set_label(me["name"])
-        self.self_status.set_label(_("Visible as {name}").format(name=me["name"]))
+        self.self_status.set_label(_("This computer"))
         self.self_icon.set_icon(w.device_icon(me["type"]))
         self.empty_title.set_label(_("Connect your phone"))
         devices = [d for d in state["devices"] if not _other_app_here(d)]
@@ -311,7 +322,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_drop(self, _target, value, _x, _y) -> bool:
         files = [f.get_path() for f in value.get_files() if f.get_path()]
         dev = self.app.device(self.selected) if self.selected else None
-        if not files or not dev or not dev["paired"]:
+        if not files or not dev or not w.plugin_loaded(dev, "share", action="share_files"):
             return False
         self.app.plugin(
             dev["id"],

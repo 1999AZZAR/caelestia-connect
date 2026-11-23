@@ -14,6 +14,7 @@ import json
 import logging
 import os
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from . import config
@@ -112,6 +113,9 @@ class IpcServer:
         self.clients.add(conn)
         await conn.run()
 
+    def has_subscribers(self) -> bool:
+        return any(conn.subscribed and not conn.writer.is_closing() for conn in self.clients)
+
     def broadcast(self, obj: Any) -> None:
         data = None
         for c in list(self.clients):
@@ -141,8 +145,9 @@ class IpcServer:
 class IpcClient:
     """Async client used by the GTK app and the CLI."""
 
-    def __init__(self, on_event: Callable[[str, Any], None] | None = None) -> None:
+    def __init__(self, on_event: Callable[[str, Any], None] | None = None, *, socket_path: Path | None = None) -> None:
         self.on_event = on_event
+        self.socket_path = socket_path or config.IPC_SOCKET
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
         self._next_id = 1
@@ -155,7 +160,7 @@ class IpcClient:
         return self.writer is not None and not self.writer.is_closing()
 
     async def connect(self) -> None:
-        self.reader, self.writer = await asyncio.open_unix_connection(str(config.IPC_SOCKET), limit=64 * 1024 * 1024)
+        self.reader, self.writer = await asyncio.open_unix_connection(self.socket_path, limit=64 * 1024 * 1024)
         self._task = asyncio.get_event_loop().create_task(self._read())
 
     async def _read(self) -> None:

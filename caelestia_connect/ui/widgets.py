@@ -1,8 +1,9 @@
-"""Small Material 3 style building blocks."""
+"""Shared GTK widgets and accessibility helpers."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from gi.repository import Adw, Gtk, Pango
 
@@ -69,6 +70,7 @@ def icon_button(
         b.add_css_class(c)
     if tooltip:
         b.set_tooltip_text(tooltip)
+        b.update_property([Gtk.AccessibleProperty.LABEL], [tooltip])
     if callback:
         b.connect("clicked", lambda *_: callback())
     return b
@@ -83,6 +85,7 @@ def text_button(text: str, icon: str | None = None, css: list[str] | None = None
     lb.set_max_width_chars(28)
     box.append(lb)
     b.set_child(box)
+    b.update_property([Gtk.AccessibleProperty.LABEL], [text])
     for c in css or ["tonal"]:
         b.add_css_class(c)
     if callback:
@@ -90,63 +93,49 @@ def text_button(text: str, icon: str | None = None, css: list[str] | None = None
     return b
 
 
-TILE_COLORS = {
-    "notifications_active": "accent-blue",
-    "ring_volume": "accent-orange",
-    "upload_file": "accent-green",
-    "link": "accent-teal",
-    "content_paste_go": "accent-yellow",
-    "folder_open": "accent-indigo",
-    "mouse": "accent-purple",
-    "screen_share": "accent-blue",
-    "stop_screen_share": "accent-red",
-    "screen_lock_portrait": "accent-orange",
-    "mobile_lock_portrait": "accent-blue",
-    "photo_camera": "accent-teal",
-    "no_photography": "accent-red",
-    "sms": "accent-green",
-    "lock": "accent-red",
-    "lock_open": "accent-green",
-}
+class ActionButton(Gtk.Button):
+    """A reusable control row that keeps focus as device state changes."""
 
-
-class Tile(Gtk.Button):
-    """Quick action tile: Apple squircle badge icon beside a clean label."""
-
-    def __init__(self, icon: str, text: str, callback=None, tooltip: str = "") -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.add_css_class("tile")
-        self.set_hexpand(True)
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, valign=Gtk.Align.CENTER, hexpand=True)
-        badge = Gtk.CenterBox(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, hexpand=False, vexpand=False)
-        badge.set_size_request(38, 38)
-        badge.add_css_class("tile-icon-badge")
-        color_class = TILE_COLORS.get(icon, "accent-blue")
-        badge.add_css_class(color_class)
-        self.icon = Icon(icon, "medium")
-        self.icon.set_halign(Gtk.Align.CENTER)
-        self.icon.set_valign(Gtk.Align.CENTER)
-        badge.set_center_widget(self.icon)
-        box.append(badge)
-
-        self.text = label(text, xalign=0.0, ellipsize=True, css=["tile-title"])
+        self.add_css_class("action-row")
+        self.set_size_request(-1, 44)
+        box = Gtk.Box(spacing=9, valign=Gtk.Align.CENTER)
+        self.icon = Icon("", "small", css=["action-icon"])
+        box.append(self.icon)
+        self.text = label(wrap=True, ellipsize=True, css=["action-label"])
+        self.text.set_lines(2)
         self.text.set_hexpand(True)
-        self.text.set_valign(Gtk.Align.CENTER)
-        self.text.set_width_chars(1)
-        self.text.set_max_width_chars(32)
         box.append(self.text)
-
+        self.arrow = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        self.arrow.add_css_class("action-arrow")
+        box.append(self.arrow)
         self.set_child(box)
-        if tooltip:
-            self.set_tooltip_text(tooltip)
-        if callback:
-            self.connect("clicked", lambda *_: callback())
+        self._callback: Callable[[], None] | None = None
+        self._appearance: tuple[str, str, str, bool, bool] | None = None
+        self.connect("clicked", self._on_click)
 
-    def set_active(self, active: bool) -> None:
+    def update(
+        self, icon: str, text: str, callback: Callable[[], None], tooltip: str, opens_view: bool, active: bool
+    ) -> None:
+        self._callback = callback
+        appearance = (icon, text, tooltip, opens_view, active)
+        if appearance == self._appearance:
+            return
+        self._appearance = appearance
+        self.icon.set_icon(icon)
+        self.text.set_label(text)
+        self.arrow.set_visible(opens_view)
+        self.set_tooltip_text(tooltip or text)
+        self.update_property([Gtk.AccessibleProperty.LABEL], [text])
         if active:
-            self.add_css_class("active")
+            self.add_css_class("session-active")
         else:
-            self.remove_css_class("active")
+            self.remove_css_class("session-active")
+
+    def _on_click(self, _button) -> None:
+        if self._callback:
+            self._callback()
 
 
 def circle(icon: Icon, css: str = "avatar") -> Gtk.Box:
@@ -174,7 +163,7 @@ def section_title(text: str) -> Gtk.Label:
 
 
 def pill(text: str, kind: str = "") -> Gtk.Label:
-    lb = Gtk.Label(label=text)
+    lb = Gtk.Label(label=text, halign=Gtk.Align.START)
     lb.add_css_class("pill")
     lb.set_ellipsize(Pango.EllipsizeMode.END)
     lb.set_max_width_chars(26)
@@ -199,8 +188,11 @@ def format_ms(ms: int) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
-def plugin_loaded(device: dict, plugin_id: str) -> bool:
-    return any(p["id"] == plugin_id and p["loaded"] for p in device.get("plugins", []))
+def plugin_loaded(device: dict, plugin_id: str, *, action: str | None = None) -> bool:
+    return any(
+        p["id"] == plugin_id and p["loaded"] and (action is None or "actions" not in p or action in p["actions"])
+        for p in device.get("plugins", [])
+    )
 
 
 def prompt(

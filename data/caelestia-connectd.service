@@ -8,6 +8,9 @@ Type=simple
 ExecStart=@BIN@/caelestia-connectd
 Restart=on-failure
 RestartSec=3
+MemoryHigh=768M
+MemoryMax=1536M
+MemorySwapMax=256M
 
 [Install]
 WantedBy=graphical-session.target

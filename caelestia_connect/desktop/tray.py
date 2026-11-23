@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from gi.repository import Gio, GLib
 
@@ -12,6 +13,7 @@ from ..utils import which
 
 if TYPE_CHECKING:
     from ..daemon import Daemon
+    from ..device import Device
 
 log = logging.getLogger(__name__)
 
@@ -105,13 +107,17 @@ class StatusNotifierTray:
                 pass
             self._reg_id = 0
 
-    def update(self, state: dict[str, Any]) -> None:
+    def update(self, devices: Iterable[Device]) -> None:
         if not self.conn or not self._reg_id:
             return
 
-        devices = state.get("devices", [])
-        connected = [d for d in devices if d.get("paired") and d.get("reachable")]
-        pair_requests = [d for d in devices if d.get("pairState") == "requestedByPeer"]
+        connected = []
+        pair_requests = []
+        for device in devices:
+            if device.pair_state == "requestedByPeer":
+                pair_requests.append(device.name)
+            elif device.paired and device.reachable:
+                connected.append(device)
 
         prev_status = self.status
         prev_icon = self.icon_name
@@ -120,18 +126,19 @@ class StatusNotifierTray:
         if pair_requests:
             self.status = "NeedsAttention"
             self.icon_name = "phone"
-            names = ", ".join(d.get("name", "Phone") for d in pair_requests)
+            names = ", ".join(pair_requests)
             self.tooltip_text = f"Pair request from {names}"
         elif connected:
             self.status = "Active"
             self.icon_name = "phone"
             parts = []
-            for d in connected:
-                name = d.get("name", "Phone")
-                bat = d.get("battery", {})
+            for device in connected:
+                name = device.name
+                battery = device.plugin("battery")
+                bat = battery.state() if battery else {}
                 chg = bat.get("charging", False)
-                lvl = bat.get("level")
-                if lvl is not None:
+                lvl = bat.get("charge", -1)
+                if lvl >= 0:
                     icon_chg = " ⚡" if chg else ""
                     parts.append(f"{name}: {lvl}%{icon_chg}")
                 else:

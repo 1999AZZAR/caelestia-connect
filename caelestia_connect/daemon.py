@@ -232,9 +232,9 @@ class Daemon:
         }
 
     def _send_state(self) -> None:
-        st = self.state()
-        self.ipc.broadcast({"event": "state", "data": st})
-        self.tray.update(st)
+        if self.ipc.has_subscribers():
+            self.ipc.broadcast({"event": "state", "data": self.state()})
+        self.tray.update(self.devices.values())
 
 
 def _setup_logging(verbose: int) -> None:

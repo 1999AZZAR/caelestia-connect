@@ -73,7 +73,8 @@ def _gio_cert_der(gcert: Gio.TlsCertificate) -> bytes:
 
 async def _read_line(stream: Gio.DataInputStream, limit: int) -> bytes | None:
     line, _length = await stream.read_line_async(PRIO)
-    if line is None:
+    # PyGObject can marshal both a blank line and EOF as b"".
+    if line is None or (not line and not stream.get_available() and not await stream.fill_async(1, PRIO)):
         return None
     if len(line) > limit:
         raise ValueError("line too long")
@@ -214,6 +215,11 @@ class LanLink:
             pass
         finally:
             self.close()
+            for stream in (self._reader, self.tls):
+                try:
+                    stream.close(None)
+                except GLib.Error:
+                    pass
 
     async def _write(self, data: bytes) -> bool:
         if self._closed:
@@ -377,8 +383,10 @@ class LanLink:
                 self._task.cancel()
             except TypeError:
                 pass
-        if self.on_closed:
-            self.on_closed(self)
+        on_closed, self.on_closed = self.on_closed, None
+        self.on_packet = None
+        if on_closed:
+            on_closed(self)
 
 
 class LanLinkProvider:

@@ -131,7 +131,8 @@ class Theme:
     def install(self) -> None:
         self._load_fonts()
         display = Gdk.Display.get_default()
-        Gtk.StyleContext.add_provider_for_display(display, self.provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 10)
+        # Keep app controls consistent when the desktop supplies its own gtk.css.
+        Gtk.StyleContext.add_provider_for_display(display, self.provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
         self.reload()
         try:
             gfile = Gio.File.new_for_path(str(SCHEME_PATH))

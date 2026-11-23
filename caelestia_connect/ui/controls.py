@@ -174,11 +174,16 @@ class Slider(Gtk.DrawingArea):
         if not self.get_mapped():
             return True
         target = self.shown_value
+        mult = self._mult_pressed if self.dragging else self._mult_idle
+        if not self.get_settings().get_property("gtk-enable-animations"):
+            if self._shown != target or self._handle_mult != mult:
+                self._shown, self._handle_mult = target, mult
+                self.queue_draw()
+            return True
         redraw = False
         if abs(self._shown - target) > 1e-4:
             self._shown += (target - self._shown) * min(1.0, dt * 12)
             redraw = True
-        mult = self._mult_pressed if self.dragging else self._mult_idle
         if abs(self._handle_mult - mult) > 1e-3:
             self._handle_mult += (mult - self._handle_mult) * min(1.0, dt * 18)
             redraw = True
@@ -208,7 +213,7 @@ class Slider(Gtk.DrawingArea):
                 cr.set_line_cap(cairo.LINE_CAP_ROUND)
                 cr.set_line_join(cairo.LINE_JOIN_ROUND)
                 x = start
-                if self.animate_wave:
+                if self.animate_wave and self.get_settings().get_property("gtk-enable-animations"):
                     cr.move_to(x, cy + amplitude * math.sin(self.frequency * 2 * math.pi * x / full + self._phase))
                     while x < end:
                         x = min(end, x + 1)
@@ -384,9 +389,7 @@ class Switch(Gtk.DrawingArea):
                 cr.set_source_rgba(1.0, 1.0, 1.0, b_alpha)
             else:
                 cr.set_source_rgba(0.0, 0.0, 0.0, b_alpha)
-            _rounded_rect(
-                cr, x0 + 0.5, y0 + 0.5, self.WIDTH - 1.0, self.HEIGHT - 1.0, *((self.HEIGHT - 1.0) / 2,) * 4
-            )
+            _rounded_rect(cr, x0 + 0.5, y0 + 0.5, self.WIDTH - 1.0, self.HEIGHT - 1.0, *((self.HEIGHT - 1.0) / 2,) * 4)
             cr.stroke()
 
         pad = 2.0

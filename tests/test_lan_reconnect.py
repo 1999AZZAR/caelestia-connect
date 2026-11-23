@@ -4,9 +4,12 @@ A stale identity for this machine used to be retried twice a second forever; eac
 failed TLS handshake leaked native memory until the daemon reached 21 GB.
 """
 
+import asyncio
 import sys
 from pathlib import Path
 from unittest import mock
+
+from gi.events import GLibEventLoopPolicy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -139,3 +142,21 @@ def test_backoff_is_bounded():
         p._note_connect_failure(PHONE_ID)
     delay = p._retry_at[PHONE_ID] - lan.time.monotonic()
     assert delay <= 60.0, "a device must be retried at least once a minute"
+
+
+def test_gio_line_reader_distinguishes_blank_packets_from_eof():
+    async def read():
+        source = lan.Gio.MemoryInputStream.new_from_bytes(lan.GLib.Bytes.new(b"\npacket\n"))
+        stream = lan.Gio.DataInputStream.new(source)
+        assert await lan._read_line(stream, 64) == b""
+        assert await lan._read_line(stream, 64) == b"packet"
+        assert await lan._read_line(stream, 64) is None
+
+    previous = asyncio.get_event_loop_policy()
+    asyncio.set_event_loop_policy(GLibEventLoopPolicy())
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(read())
+    finally:
+        loop.close()
+        asyncio.set_event_loop_policy(previous)

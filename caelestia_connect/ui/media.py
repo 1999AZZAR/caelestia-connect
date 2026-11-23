@@ -57,7 +57,7 @@ class CoverVisualiser(Gtk.DrawingArea):
     def _tick(self, _widget, _clock) -> bool:
         now = time.monotonic()
         dt, self._last = now - self._last, now
-        if not self.get_mapped():
+        if not self.get_mapped() or not self.get_settings().get_property("gtk-enable-animations"):
             return True
         changed = False
         for i in range(BARS):
@@ -180,13 +180,12 @@ class MediaCard(Gtk.Box):
         prog.append(self.len_label)
         col.append(prog)
 
-        row = Gtk.Box(spacing=4, margin_top=16)
-        self.shuffle = self._btn("shuffle", "media-side", lambda: self.on_action("shuffle"))
-        self.prev = self._btn("skip_previous", "media-tonal", lambda: self.on_action("Previous"))
-        self.play = self._btn("play_arrow", "media-play", lambda: self.on_action("PlayPause"))
-        self.play.set_hexpand(True)
-        self.next = self._btn("skip_next", "media-tonal", lambda: self.on_action("Next"))
-        self.repeat = self._btn("repeat", "media-side", lambda: self.on_action("repeat"))
+        row = Gtk.Box(spacing=6, margin_top=12, halign=Gtk.Align.CENTER)
+        self.shuffle = self._btn("shuffle", _("Shuffle"), "media-side", lambda: self.on_action("shuffle"))
+        self.prev = self._btn("skip_previous", _("Previous track"), "media-tonal", lambda: self.on_action("Previous"))
+        self.play = self._btn("play_arrow", _("Play"), "media-play", lambda: self.on_action("PlayPause"))
+        self.next = self._btn("skip_next", _("Next track"), "media-tonal", lambda: self.on_action("Next"))
+        self.repeat = self._btn("repeat", _("Repeat"), "media-side", lambda: self.on_action("repeat"))
         for b in (self.shuffle, self.prev, self.play, self.next, self.repeat):
             row.append(b)
         col.append(row)
@@ -206,12 +205,10 @@ class MediaCard(Gtk.Box):
         self.set_spacing(12 if compact else 24)
 
     @staticmethod
-    def _btn(icon: str, css: str, cb) -> Gtk.Button:
-        b = Gtk.Button()
-        b.set_child(w.Icon(icon, "large" if css != "media-side" else "medium"))
+    def _btn(icon: str, title: str, css: str, cb) -> Gtk.Button:
+        b = w.icon_button(icon, title, [css], size="large" if css == "media-play" else "medium", callback=cb)
+        b.remove_css_class("round")
         b.add_css_class("media-btn")
-        b.add_css_class(css)
-        b.connect("clicked", lambda *_: cb())
         return b
 
     def _selected(self, dd, _p) -> None:
@@ -280,6 +277,9 @@ class MediaCard(Gtk.Box):
         self.slider.set_sensitive(p["canSeek"] and self.length > 0)
         self.len_label.set_label(w.format_ms(self.length) if self.length else "--:--")
         self.play.get_child().set_icon("pause" if p["playing"] else "play_arrow")
+        play_label = _("Pause") if p["playing"] else _("Play")
+        self.play.set_tooltip_text(play_label)
+        self.play.update_property([Gtk.AccessibleProperty.LABEL], [play_label])
         if p["playing"]:
             self.play.add_css_class("checked")
         else:

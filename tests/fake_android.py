@@ -78,9 +78,9 @@ ANDROID_OUTGOING = [
 ]
 
 
-def make_identity(tmp: str):
+def make_identity(tmp: str, device_id: str | None = None):
     key = ec.generate_private_key(ec.SECP256R1())
-    device_id = uuid.uuid4().hex
+    device_id = device_id or uuid.uuid4().hex
     name = x509.Name(
         [
             x509.NameAttribute(NameOID.COMMON_NAME, device_id),
@@ -128,9 +128,9 @@ def read_line(sock) -> bytes:
 
 
 class FakeAndroid:
-    def __init__(self, host_ip: str, daemon_cert_pem: str | None = None) -> None:
+    def __init__(self, host_ip: str, daemon_cert_pem: str | None = None, *, device_id: str | None = None) -> None:
         self.tmp = tempfile.mkdtemp(prefix="fakeandroid-")
-        self.device_id, self.cert, self.cert_path, self.key_path = make_identity(self.tmp)
+        self.device_id, self.cert, self.cert_path, self.key_path = make_identity(self.tmp, device_id)
         self.host_ip = host_ip
         self.daemon_cert_pem = daemon_cert_pem
         self.name = "Test Pixel"
@@ -169,7 +169,7 @@ class FakeAndroid:
         ctx.load_verify_locations(cadata=self.daemon_cert_pem)
         return ctx
 
-    def connect_by_broadcast(self, timeout: float = 10) -> None:
+    def connect_by_broadcast(self, timeout: float = 10, *, discovery_port: int = 1716) -> None:
         """We announce ourselves over UDP; the daemon connects back to our TCP port."""
         srv = socket.socket()
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -196,7 +196,7 @@ class FakeAndroid:
                     "deviceType": "phone",
                 },
             ),
-            (self.host_ip, 1716),
+            (self.host_ip, discovery_port),
         )
         u.close()
         conn, _addr = srv.accept()
@@ -221,12 +221,12 @@ class FakeAndroid:
         self.desktop_identity = json.loads(read_line(self.tls))
         assert self.desktop_identity["type"] == "kdeconnect.identity"
         self.tls.settimeout(None)
-        threading.Thread(target=self._reader, daemon=True).start()
+        threading.Thread(target=self._reader, args=(self.tls,), daemon=True).start()
 
-    def _reader(self) -> None:
+    def _reader(self, tls: ssl.SSLSocket) -> None:
         try:
             while True:
-                pkt = json.loads(read_line(self.tls))
+                pkt = json.loads(read_line(tls))
                 with self.cond:
                     self.received.append(pkt)
                     self.cond.notify_all()
@@ -249,7 +249,9 @@ class FakeAndroid:
                     raise TimeoutError(f"no {ptype} received; got {[p['type'] for p in self.received]}")
                 self.cond.wait(left)
 
-    def send_with_payload(self, ptype: str, body: dict, data: bytes) -> threading.Thread:
+    def send_with_payload(
+        self, ptype: str, body: dict, data: bytes, *, declared_size: int | None = None
+    ) -> threading.Thread:
         """Serve `data` like Android does: listen, announce the port, wait for the desktop to fetch it."""
         srv = socket.socket()
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -264,7 +266,10 @@ class FakeAndroid:
                 conn, _ = srv.accept()
                 tls = self.server_ctx().wrap_socket(conn, server_side=True)
                 tls.sendall(data)
-                tls.close()
+                if declared_size == -1:
+                    tls.unwrap().close()
+                else:
+                    tls.close()
                 result["ok"] = True
             except Exception as e:
                 result["error"] = repr(e)
@@ -275,7 +280,14 @@ class FakeAndroid:
         t.result = result
         t.start()
         with self._send_lock:
-            self.tls.sendall(packet(ptype, body, payloadSize=len(data), payloadTransferInfo={"port": port}))
+            self.tls.sendall(
+                packet(
+                    ptype,
+                    body,
+                    payloadSize=len(data) if declared_size is None else declared_size,
+                    payloadTransferInfo={"port": port},
+                )
+            )
         return t
 
     def fetch_payload(self, pkt: dict) -> bytes:

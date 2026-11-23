@@ -12,6 +12,7 @@ Terminal=false
 Categories=Network;Utility;GTK;
 Keywords=kde;connect;phone;android;sms;kdeconnect;celular;
 StartupNotify=true
+StartupWMClass=org.caelestia.Connect
 SingleMainWindow=true
 Actions=messages;
 

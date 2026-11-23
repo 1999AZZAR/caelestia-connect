@@ -44,6 +44,7 @@ class SmsPlugin(Plugin):
             str(t): {str(k): m for k, m in msgs.items()} for t, msgs in (stored.get("threads") or {}).items()
         }
         self.version = 0
+        self._dirty = False
         self._save = Debouncer(2.0, self._persist)
 
     def destroy(self):
@@ -51,7 +52,9 @@ class SmsPlugin(Plugin):
         self._persist()
 
     def _persist(self):
-        write_json_atomic(self.cache_path, {"threads": self.threads})
+        if self._dirty:
+            write_json_atomic(self.cache_path, {"threads": self.threads})
+            self._dirty = False
 
     async def connected(self):
         self.send("kdeconnect.sms.request_conversations")
@@ -63,6 +66,7 @@ class SmsPlugin(Plugin):
 
     async def handle(self, pkt):
         if pkt.type == "kdeconnect.sms.messages":
+            changed = False
             for msg in pkt.get_list("messages"):
                 if not isinstance(msg, dict):
                     continue
@@ -75,10 +79,16 @@ class SmsPlugin(Plugin):
                         k for k, m in thread.items() if k.startswith("pending-") and m.get("body") == msg.get("body")
                     ]:
                         del thread[k]
-                thread[self._key(msg)] = msg
-            self.version += 1
-            self._save()
-            self.changed()
+                        changed = True
+                key = self._key(msg)
+                if thread.get(key) != msg:
+                    thread[key] = msg
+                    changed = True
+            if changed:
+                self.version += 1
+                self._dirty = True
+                self._save()
+                self.changed()
         elif pkt.type == "kdeconnect.sms.attachment_file" and pkt.has_payload:
             name = re.sub(r"[^A-Za-z0-9_.-]", "_", Path(pkt.get_str("filename")).name)
             if not name:
@@ -201,6 +211,7 @@ class SmsPlugin(Plugin):
                 "read": True,
             }
             self.version += 1
+            self._dirty = True
             self.changed()
             # Ask for the stored copy shortly after
             self.request_conversation(thread, count=10)
@@ -217,5 +228,10 @@ class SmsPlugin(Plugin):
         return ""
 
     def state(self):
-        unread = sum(1 for c in self.conversations() if not c["read"])
+        unread = 0
+        for thread in self.threads.values():
+            if thread:
+                latest = max(thread.values(), key=lambda msg: int(msg.get("date") or 0))
+                if not latest.get("read", True) and int(latest.get("type") or 0) != MESSAGE_TYPE_SENT:
+                    unread += 1
         return {"version": self.version, "threads": len(self.threads), "unread": unread}

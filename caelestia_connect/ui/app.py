@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from gi.repository import Adw, Gio, GLib, Gtk
@@ -22,9 +24,12 @@ log = logging.getLogger(__name__)
 
 class ConnectApp(Adw.Application):
     def __init__(self) -> None:
-        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        socket = os.environ.get("CAELESTIA_CONNECT_PREVIEW_SOCKET")
+        app_id = APP_ID + ".RustPreview" if socket else APP_ID
+        super().__init__(application_id=app_id, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.rust_preview = bool(socket)
         self.theme = Theme()
-        self.client = IpcClient(on_event=self._on_event)
+        self.client = IpcClient(on_event=self._on_event, socket_path=Path(socket) if socket else None)
         self.client.on_disconnect = self._on_disconnect
         self.state: dict[str, Any] = {}
         self.listeners: list[Callable[[dict], None]] = []
@@ -62,6 +67,8 @@ class ConnectApp(Adw.Application):
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
+        if self.rust_preview:
+            Gtk.Window.set_default_icon_name(APP_ID)
         self.theme.install()
         for name, cb, accel in (
             ("quit", lambda *_: self.quit(), "<primary>q"),
@@ -177,7 +184,7 @@ class ConnectApp(Adw.Application):
                     self._pending_actions.clear()
                     break
                 except (OSError, ConnectionError):
-                    if not started:
+                    if not started and not self.rust_preview:
                         started = True
                         self._start_daemon()
                     self.state = {}
@@ -196,8 +203,12 @@ class ConnectApp(Adw.Application):
             == 0
         ):
             return
+        launcher = shutil.which("caelestia-connectd") or Path.home() / ".local/bin/caelestia-connectd"
+        command = [str(launcher)]
+        if not Path(launcher).is_file():
+            command = [sys.executable, "-m", "caelestia_connect.daemon", "-q"]
         subprocess.Popen(
-            [sys.executable, "-m", "caelestia_connect.daemon", "-q"],
+            command,
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -282,4 +293,5 @@ def main(argv: list[str] | None = None) -> int:
 
     asyncio.set_event_loop_policy(GLibEventLoopPolicy())
     app = ConnectApp()
+    GLib.set_prgname(app.get_application_id())
     return app.run(argv if argv is not None else sys.argv)

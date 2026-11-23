@@ -115,7 +115,7 @@ class DevicePage(Gtk.Box):
         self.messages = MessagesView(app, self)
         self.view_stack.add_titled_with_icon(self.messages, "messages", _("Messages"), "mail-unread-symbolic")
         self.remote = RemoteView(app, self)
-        self.view_stack.add_titled_with_icon(self.remote, "remote", _("Remote input"), "input-mouse-symbolic")
+        self.view_stack.add_titled_with_icon(self.remote, "remote", _("Remote"), "input-mouse-symbolic")
         self.settings = DeviceSettings(app, self)
         self.view_stack.add_titled_with_icon(self.settings, "settings", _("Settings"), "emblem-system-symbolic")
 
@@ -200,19 +200,27 @@ class DevicePage(Gtk.Box):
         view = Gtk.TextView(
             wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=8, bottom_margin=8, left_margin=8, right_margin=8
         )
-        view.set_size_request(320, 100)
+        view.update_property([Gtk.AccessibleProperty.LABEL], [_("Link or text")])
         frame = Gtk.ScrolledWindow(min_content_height=100)
         frame.set_child(view)
         frame.add_css_class("card")
         dlg.set_extra_child(frame)
         dlg.add_response("cancel", _("Cancel"))
         dlg.add_response("send", _("Send"))
+        dlg.set_close_response("cancel")
         dlg.set_response_appearance("send", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_response_enabled("send", False)
+
+        def entered_text(buf: Gtk.TextBuffer) -> str:
+            return buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip()
+
+        view.get_buffer().connect("changed", lambda buf: dlg.set_response_enabled("send", bool(entered_text(buf))))
 
         def done(_d, resp):
-            buf = view.get_buffer()
-            text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip()
-            if resp != "send" or not text:
+            if resp != "send":
+                return
+            text = entered_text(view.get_buffer())
+            if not text:
                 return
             if "\n" not in text and text.startswith(("http://", "https://", "mailto:", "tel:", "geo:")):
                 self.app.plugin(

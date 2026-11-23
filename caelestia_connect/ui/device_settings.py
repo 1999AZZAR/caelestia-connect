@@ -64,16 +64,15 @@ class DeviceSettings(Adw.PreferencesPage):
             scrcpy_group.add(sw_row)
 
             if p_android["enabled"]:
-                if not android_state.get("tools", True):
+                has_tools = android_state.get("tools", True)
+                if not has_tools:
                     warning_row = Adw.ActionRow(
                         title=_("Missing tools"),
                         subtitle=_("scrcpy and adb must be installed on your computer to mirror the screen."),
                     )
                     warning_row.add_css_class("warning")
                     scrcpy_group.add(warning_row)
-                else:
-                    is_mirroring = android_state.get("mirroring", False)
-                if is_mirroring:
+                elif android_state.get("mirroring", False):
                     action_row = Adw.ButtonRow(
                         title=_("Stop mirroring"), start_icon_name="media-playback-stop-symbolic"
                     )
@@ -94,6 +93,7 @@ class DeviceSettings(Adw.PreferencesPage):
                     )
                     action_row.add_css_class("suggested-action")
                     from . import mirroring
+
                     action_row.connect("activated", lambda *_: mirroring.show(self.app, self.page.window, self.device))
                     scrcpy_group.add(action_row)
 
@@ -142,6 +142,8 @@ class DeviceSettings(Adw.PreferencesPage):
                 on_toggle=lambda on, pid=p["id"]: self._toggle(pid, on),
                 before_switch=arrow,
             )
+            if p.get("readOnly"):
+                _sw.set_sensitive(False)
             plugins.add(row)
             if arrow is None:
                 continue

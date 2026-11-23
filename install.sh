@@ -2,6 +2,8 @@
 # Installs Caelestia Connect for the current user and integrates it with the Caelestia shell.
 #   ./install.sh               install / update
 #   ./install.sh --no-shell    do not touch the Caelestia shell
+#   ./install.sh --rust        install the Rust daemon with the regular profile
+#   ./install.sh --python      select the Python daemon
 #   ./install.sh --webcam      also create the virtual webcam for the phone camera (asks for sudo once)
 #   ./install.sh --uninstall   remove everything (keeps pairing data in ~/.config/caelestia-connect)
 set -euo pipefail
@@ -12,6 +14,7 @@ APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICONS="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 UNITS="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 NAUTILUS="${XDG_DATA_HOME:-$HOME/.local/share}/nautilus-python/extensions"
+RUST_LINK="${XDG_DATA_HOME:-$HOME/.local/share}/caelestia-connect/rust-daemon"
 SHELL_DIR="${CAELESTIA_SHELL_DIR:-$HOME/.config/quickshell/caelestia}"
 PY="$(command -v python3)"
 WEBCAM_MODPROBE=/etc/modprobe.d/caelestia-connect-webcam.conf
@@ -50,12 +53,12 @@ setup_webcam() {
 
 shell=1
 webcam=0
-case "${1:-}" in
---uninstall)
+backend=
+if [[ "${1:-}" == --uninstall && $# == 1 ]]; then
     systemctl --user disable --now caelestia-connectd.service 2>/dev/null || true
     rm -f "$BIN/caelestia-connect" "$BIN/caelestia-connectd" "$BIN/caelestia-connect-cli" \
         "$APPS/org.caelestia.Connect.desktop" "$ICONS/org.caelestia.Connect.svg" \
-        "$UNITS/caelestia-connectd.service" "$NAUTILUS/caelestia_connect_nautilus.py"
+        "$UNITS/caelestia-connectd.service" "$NAUTILUS/caelestia_connect_nautilus.py" "$RUST_LINK"
     [ -d "$SHELL_DIR" ] && "$PY" "$SRC/caelestia/integrate.py" --shell "$SHELL_DIR" --uninstall || true
     if [ -e "$WEBCAM_MODPROBE" ] || [ -e "$WEBCAM_LOAD" ]; then
         echo "Removing the virtual webcam configuration (sudo)"
@@ -64,10 +67,43 @@ case "${1:-}" in
     systemctl --user daemon-reload || true
     echo "Caelestia Connect removed."
     exit 0
-    ;;
---no-shell) shell=0 ;;
---webcam) webcam=1 ;;
-esac
+fi
+for arg in "$@"; do
+    case "$arg" in
+        --no-shell) shell=0 ;;
+        --webcam) webcam=1 ;;
+        --rust | --python)
+            if [[ -n "$backend" && "$backend" != "${arg#--}" ]]; then
+                echo "Choose one daemon backend." >&2
+                exit 2
+            fi
+            backend="${arg#--}"
+            ;;
+        *)
+            echo "Unknown option: $arg" >&2
+            exit 2
+            ;;
+    esac
+done
+if [[ -z "$backend" ]]; then
+    backend=python
+    if grep -Fxq '# daemon-backend: rust' "$BIN/caelestia-connectd" 2>/dev/null; then
+        backend=rust
+    fi
+fi
+
+if [[ "$backend" == rust ]]; then
+    echo ":: Building the Rust daemon with Nix"
+    mkdir -p "$(dirname "$RUST_LINK")"
+    CAELESTIA_RUST_SOURCE="$SRC/rust-daemon" nix build --impure --out-link "$RUST_LINK" --expr '
+      let source = builtins.path {
+        path = /. + builtins.getEnv "CAELESTIA_RUST_SOURCE";
+        filter = path: type: baseNameOf path != "target";
+      };
+      in (builtins.getFlake ("path:" + builtins.unsafeDiscardStringContext (toString source))).packages.${builtins.currentSystem}.default
+    '
+    test -x "$RUST_LINK/bin/caelestia-connectd-rust"
+fi
 
 echo ":: Checking dependencies"
 missing=()
@@ -97,12 +133,19 @@ mkdir -p "$BIN" "$APPS" "$ICONS" "$UNITS" "$NAUTILUS"
 for pair in "caelestia-connect:caelestia_connect.ui" "caelestia-connectd:caelestia_connect.daemon" \
     "caelestia-connect-cli:caelestia_connect.cli"; do
     name="${pair%%:*}" mod="${pair#*:}"
-    cat >"$BIN/$name" <<EOF
+    launcher="$(mktemp "$BIN/.$name.XXXXXXXX")"
+    if [[ "$name" == caelestia-connectd && "$backend" == rust ]]; then
+        printf '#!/bin/bash\n# daemon-backend: rust\nexec %q "$@"\n' \
+            "$RUST_LINK/bin/caelestia-connectd-rust" >"$launcher"
+    else
+        cat >"$launcher" <<EOF
 #!/bin/sh
 export PYTHONPATH="$SRC\${PYTHONPATH:+:\$PYTHONPATH}"
 exec "$PY" -m $mod "\$@"
 EOF
-    chmod +x "$BIN/$name"
+    fi
+    chmod 755 "$launcher"
+    mv -f "$launcher" "$BIN/$name"
 done
 
 echo ":: Installing desktop entry, icon, fonts and Nautilus extension"
