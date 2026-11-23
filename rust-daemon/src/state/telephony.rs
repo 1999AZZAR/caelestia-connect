@@ -11,6 +11,14 @@ pub const EVENT: &str = "kdeconnect.telephony";
 pub const MUTE: &str = "kdeconnect.telephony.request_mute";
 pub const PAUSE: &str = "pausemusic";
 
+fn call_text(text: &str) -> String {
+    text.trim()
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(128)
+        .collect()
+}
+
 const PAUSE_OPTIONS: [(&str, &str, bool); 4] = [
     (
         "conditionTalking",
@@ -110,7 +118,25 @@ impl State {
         audio
     }
 
-    pub fn receive_call(&self, id: &str, serial: u64, body: &Value) {
+    pub async fn receive_call(&self, id: &str, serial: u64, body: &Value) {
+        let event = body["event"].as_str().unwrap_or_default();
+        let canceled = body["isCancel"].as_bool() == Some(true);
+        let mut number = call_text(body["phoneNumber"].as_str().unwrap_or_default());
+        let mut contact = call_text(body["contactName"].as_str().unwrap_or_default());
+        let lookup = matches!(event, "ringing" | "missedCall")
+            && !canceled
+            && !number.is_empty()
+            && contact.is_empty()
+            && self
+                .links
+                .lock()
+                .unwrap()
+                .call_link(id, Some(serial))
+                .is_some();
+        if lookup && let Some(name) = self.contact_name(id, serial, &number).await {
+            contact = call_text(&name);
+        }
+
         let mut links = self.links.lock().unwrap();
         let Some(trusted) = links.trust.get(id).filter(|_| !links.blocked.contains(id)) else {
             return;
@@ -124,11 +150,6 @@ impl State {
         else {
             return;
         };
-        let event = body
-            .get("event")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let canceled = body.get("isCancel").and_then(Value::as_bool) == Some(true);
         if pause {
             let activity = match event {
                 "ringing" => Some(Activity::Ringing),
@@ -161,17 +182,6 @@ impl State {
         if !matches!(event, "ringing" | "talking" | "missedCall") {
             return;
         }
-        let text = |key| {
-            body.get(key)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .chars()
-                .filter(|ch| !ch.is_control())
-                .take(128)
-                .collect::<String>()
-        };
-        let mut number = text("phoneNumber");
-        let mut contact = text("contactName");
         if event == "talking" {
             if let Some(previous) = link.status.get(PLUGIN).and_then(|state| state.get("call")) {
                 if number.is_empty() {

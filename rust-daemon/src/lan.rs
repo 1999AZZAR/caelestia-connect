@@ -497,7 +497,7 @@ async fn serve_link(
                     } else if packet.kind == crate::notifications::INFO {
                         state.receive_notification(&id, serial, packet);
                     } else if packet.kind == crate::state::telephony::EVENT {
-                        state.receive_call(&id, serial, &packet.body);
+                        state.receive_call(&id, serial, &packet.body).await;
                     } else if packet.kind == crate::audio::INFO {
                         state.receive_remote_sinks(&id, serial, packet.body);
                     } else if packet.kind == crate::audio::REQUEST {

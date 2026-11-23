@@ -54,6 +54,25 @@ impl State {
             .messaging_allowed(id, serial, plugin)
     }
 
+    pub(super) async fn contact_name(&self, id: &str, serial: u64, number: &str) -> Option<String> {
+        if !self.messaging_enabled(id, serial, messages::CONTACTS) {
+            return None;
+        }
+        let (response, result) = oneshot::channel();
+        self.messaging
+            .try_send(messages::Request::ContactName {
+                id: id.to_owned(),
+                serial,
+                number: number.to_owned(),
+                response,
+            })
+            .ok()?;
+        tokio::time::timeout(std::time::Duration::from_millis(250), result)
+            .await
+            .ok()?
+            .ok()?
+    }
+
     pub(super) fn start_messaging(&self, id: &str) {
         self.refresh_message_cache(id, true);
     }

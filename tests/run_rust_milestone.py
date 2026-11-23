@@ -1563,8 +1563,8 @@ async def check_notifications(client, peer, root, gtk_action):
                     return call
                 await asyncio.sleep(0.05)
 
-    peer.send("kdeconnect.telephony", {"event": "ringing", "contactName": "Fixture Caller", "phoneNumber": SMS_NUMBER})
-    assert (await call_status("ringing"))["contact"] == "Fixture Caller"
+    peer.send("kdeconnect.telephony", {"event": "ringing", "phoneNumber": "(555) 000-1234"})
+    assert (await call_status("ringing"))["contact"] == "Fixture Contact"
     if gtk_action:
         await gtk_action(peer.device_id, "call")
     async with asyncio.timeout(5):
@@ -1575,27 +1575,39 @@ async def check_notifications(client, peer, root, gtk_action):
                 break
             await asyncio.sleep(0.05)
     call_token, ringing_popup = ringing
-    assert ringing_popup["body"] == "Incoming call from Fixture Caller"
+    assert ringing_popup["body"] == "Incoming call from Fixture Contact"
     assert ringing_popup["actions"] == ["mute", "Mute call"]
     await asyncio.to_thread(trigger, "ActionInvoked", "mute", call_token)
     await asyncio.to_thread(
         peer.wait_for, "kdeconnect.telephony.request_mute", lambda body: body.get("action") == "mute"
     )
     peer.send("kdeconnect.telephony", {"event": "talking"})
-    assert (await call_status("talking"))["contact"] == "Fixture Caller"
+    assert (await call_status("talking"))["contact"] == "Fixture Contact"
     async with asyncio.timeout(5):
         while call_token in json.loads(data_file.read_text()):
             await asyncio.sleep(0.05)
     peer.send("kdeconnect.telephony", {"event": "talking", "isCancel": True})
     await call_status(None)
-    peer.send("kdeconnect.telephony", {"event": "missedCall", "phoneNumber": SMS_NUMBER})
-    assert (await call_status("missedCall"))["number"] == SMS_NUMBER
+    peer.send(
+        "kdeconnect.telephony", {"event": "missedCall", "phoneNumber": SMS_NUMBER, "contactName": "Fixture Caller"}
+    )
+    assert (await call_status("missedCall"))["contact"] == "Fixture Caller"
     async with asyncio.timeout(5):
         while not any(
-            popup["body"] == f"Missed call from {SMS_NUMBER}" for popup in json.loads(data_file.read_text()).values()
+            popup["body"] == "Missed call from Fixture Caller" for popup in json.loads(data_file.read_text()).values()
         ):
             await asyncio.sleep(0.05)
-    print("PASS incoming, active and missed calls, GTK call status, and desktop ringtone mute", flush=True)
+    peer.send("kdeconnect.telephony", {"event": "missedCall", "isCancel": True})
+    await call_status(None)
+    unknown = "+1 555 000 9876"
+    peer.send("kdeconnect.telephony", {"event": "missedCall", "phoneNumber": unknown})
+    assert (await call_status("missedCall"))["contact"] == unknown
+    async with asyncio.timeout(5):
+        while not any(
+            popup["body"] == f"Missed call from {unknown}" for popup in json.loads(data_file.read_text()).values()
+        ):
+            await asyncio.sleep(0.05)
+    print("PASS caller lookup, phone-supplied names, GTK call status, and desktop ringtone mute", flush=True)
 
 
 def run_tray_watcher(record: Path):
@@ -2061,7 +2073,7 @@ def run_gtk(device_id: str, action: str) -> int:
                     page.device.get("id") == device_id
                     and call
                     and any(
-                        child.get_child().get_label() == "Call: Fixture Caller" and child.get_mapped()
+                        child.get_child().get_label() == "Call: Fixture Contact" and child.get_mapped()
                         for child in page.overview.pills
                     )
                 ):

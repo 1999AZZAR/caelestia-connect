@@ -93,6 +93,12 @@ pub enum Request {
         id: String,
         serial: u64,
     },
+    ContactName {
+        id: String,
+        serial: u64,
+        number: String,
+        response: oneshot::Sender<Option<String>>,
+    },
 }
 
 fn number(value: &Value) -> Option<i64> {
@@ -511,6 +517,7 @@ fn handle(
         Request::Load { id, serial }
         | Request::Incoming { id, serial, .. }
         | Request::Action { id, serial, .. }
+        | Request::ContactName { id, serial, .. }
         | Request::AttachmentDone { id, serial } => (id.as_str(), *serial),
     };
     let peer = Session { state, id, serial };
@@ -521,6 +528,7 @@ fn handle(
         Request::Action {
             plugin, response, ..
         } => !response.is_closed() && peer.enabled(plugin),
+        Request::ContactName { response, .. } => !response.is_closed() && peer.enabled(CONTACTS),
         Request::AttachmentDone { .. } => peer.enabled(SMS),
         Request::Load { .. } => peer.enabled(SMS) || peer.enabled(CONTACTS),
     };
@@ -568,6 +576,12 @@ fn handle(
                 cache.changed(false);
                 cache.publish(state, &id, serial);
             }
+        }
+        Request::ContactName {
+            number, response, ..
+        } => {
+            let name = result.ok().and_then(|cache| cache.contacts.name(&number));
+            let _ = response.send(name.map(str::to_owned));
         }
         Request::Load { id, .. } => {
             if let Ok(cache) = result {

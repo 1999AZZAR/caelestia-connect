@@ -148,10 +148,11 @@ impl Contacts {
     }
 
     pub(super) fn lookup<'a>(&'a self, number: &'a str) -> &'a str {
-        self.numbers
-            .get(&normalize(number))
-            .map(String::as_str)
-            .unwrap_or(number)
+        self.name(number).unwrap_or(number)
+    }
+
+    pub(super) fn name(&self, number: &str) -> Option<&str> {
+        self.numbers.get(&normalize(number)).map(String::as_str)
     }
 
     pub(super) fn status(&self) -> Value {
