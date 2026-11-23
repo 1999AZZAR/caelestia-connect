@@ -363,13 +363,33 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
             raise AssertionError("Disabled Ping still sent a packet")
         assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="ping", enabled=True)
 
-        peer.send("kdeconnect.battery", {"currentCharge": 76, "isCharging": True})
+        assert "kdeconnect.battery.request" in peer.desktop_identity["body"]["outgoingCapabilities"]
+        await asyncio.to_thread(
+            peer.wait_for, "kdeconnect.battery.request", lambda body: body == {"request": True}, 5
+        )
+        peer.send("kdeconnect.battery", {"currentCharge": 76.0, "isCharging": True})
         peer.send(
             "kdeconnect.connectivity_report", {"signalStrengths": {"0": {"networkType": "5G", "signalStrength": 3}}}
         )
         status = await wait_for_device(peer.device_id, lambda d: d and "connectivity_report" in d["state"])
         assert status["state"]["battery"] == {"charge": 76, "charging": True}
         await check_tray("Active", "76%")
+        if check_gtk:
+            await gtk_action(peer.device_id, "battery")
+        assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="battery", enabled=False)
+        peer.send("kdeconnect.battery", {"currentCharge": 80, "isCharging": False})
+        peer.send(
+            "kdeconnect.connectivity_report", {"signalStrengths": {"0": {"networkType": "5G", "signalStrength": 4}}}
+        )
+        disabled = await wait_for_device(
+            peer.device_id, lambda d: d and d["state"].get("connectivity_report", {}).get("strength") == 4
+        )
+        assert "battery" not in disabled["state"]
+        assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="battery", enabled=True)
+        await asyncio.to_thread(peer.wait_for, "kdeconnect.battery.request", timeout=5)
+        peer.send("kdeconnect.battery", {"currentCharge": "76", "isCharging": "1"})
+        battery = await wait_for_device(peer.device_id, lambda d: d and d["state"].get("battery"))
+        assert battery["state"]["battery"] == {"charge": 76, "charging": True}
         assert status["state"]["connectivity_report"]["strength"] == 3
         assert status["state"]["connectivity_report"]["networkType"] == "5G"
         assert await client.call("device.call", device=peer.device_id, plugin="findmyphone", action="ring")
@@ -424,6 +444,8 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
         await expect_inhibit(True)
         await set_inhibit(False)
         await expect_inhibit(False)
+        reconnected = device(await client.call("state"), peer.device_id)
+        assert reconnected["state"]["battery"] == {"charge": 76, "charging": True}
         assert json.loads(inhibitor.read_text())["acquisitions"] == 2
         print("PASS idle inhibition starts only when enabled and follows the connection lifecycle", flush=True)
         assert await send_ping(peer.device_id, "direct reconnect")
@@ -533,7 +555,10 @@ async def check_connection_recovery(peer, desktop_id, desktop_port, discovery_po
             await asyncio.to_thread(
                 peer.connect_direct, desktop_port, desktop_id, source=next_address, advertised_port=next_port
             )
-            await wait_for_device(peer.device_id, lambda d: d and d["reachable"] and d["address"] == next_address)
+            recovered = await wait_for_device(
+                peer.device_id, lambda d: d and d["reachable"] and d["address"] == next_address
+            )
+            assert recovered["state"]["battery"] == {"charge": 76, "charging": True}
             assert await ping(peer.device_id, "address changed")
             await asyncio.to_thread(
                 peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "address changed"
@@ -550,7 +575,10 @@ async def check_connection_recovery(peer, desktop_id, desktop_port, discovery_po
         connection, source = await asyncio.to_thread(listener.accept)
         assert source[0] == "127.0.0.1"
         await asyncio.to_thread(peer.accept_connection, connection)
-        await wait_for_device(peer.device_id, lambda d: d and d["reachable"] and d["address"] == next_address)
+        recovered = await wait_for_device(
+            peer.device_id, lambda d: d and d["reachable"] and d["address"] == next_address
+        )
+        assert recovered["state"]["battery"] == {"charge": 76, "charging": True}
         assert await ping(peer.device_id, "automatic reconnect")
         await asyncio.to_thread(
             peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "automatic reconnect"
@@ -1900,6 +1928,7 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
     try:
         assert not IPC_SOCKET.exists()
         peer.incoming_capabilities.append("kdeconnect.systemvolume.request")
+        peer.incoming_capabilities.append("kdeconnect.battery.request")
         peer.outgoing_capabilities.append("kdeconnect.systemvolume")
         peer.incoming_capabilities.append("kdeconnect.runcommand.request")
         peer.outgoing_capabilities.extend(["kdeconnect.runcommand", "kdeconnect.runcommand.output"])
@@ -1980,6 +2009,7 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
             previous["plugins"]["runcommand"] = True
             previous["plugins"]["screensaver_inhibit"] = False
             previous["plugins"]["android"] = True
+            previous["plugins"]["battery"] = True
             previous["plugins"]["sms"] = True
             previous["plugins"]["contacts"] = True
             previous.setdefault("pluginSettings", {})["mprisremote"] = {"hideIdle": False, "exportMpris": False}
@@ -2104,6 +2134,21 @@ def run_gtk(device_id: str, action: str) -> int:
                         clicked = True
                         GLib.timeout_add(100, app.quit)
                         return GLib.SOURCE_REMOVE
+                button = None
+            elif action == "battery":
+                row = app.window.rows.get(device_id)
+                if (
+                    page.device.get("id") == device_id
+                    and row is not None
+                    and row.status.get_label() == "Connected · 76% ⚡"
+                    and any(
+                        child.get_child().get_label() == "76% · charging" and child.get_mapped()
+                        for child in page.overview.pills
+                    )
+                ):
+                    clicked = True
+                    GLib.timeout_add(100, app.quit)
+                    return GLib.SOURCE_REMOVE
                 button = None
             elif action == "call":
                 call = page.device.get("state", {}).get("telephony", {}).get("call", {})
@@ -2233,6 +2278,7 @@ def main() -> int:
             "media",
             "messages",
             "notifications",
+            "battery",
             "call",
             "audio-settings",
             "commands",

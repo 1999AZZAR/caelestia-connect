@@ -5,6 +5,8 @@ use std::{fs, path::Path, time::Duration};
 use tokio::sync::Semaphore;
 
 pub const BATTERY: &str = "kdeconnect.battery";
+pub const BATTERY_REQUEST: &str = "kdeconnect.battery.request";
+pub const BATTERY_PLUGIN: &str = "battery";
 pub const CONNECTIVITY: &str = "kdeconnect.connectivity_report";
 pub const RING: &str = "kdeconnect.findmyphone.request";
 
@@ -50,16 +52,28 @@ pub fn notify(title: String, text: String, icon: &'static str) {
 pub fn reported_status(packet: &Packet) -> Option<(&'static str, Value)> {
     match packet.kind.as_str() {
         BATTERY => {
-            let charge = packet.body.get("currentCharge")?.as_i64()?;
-            if !(-1..=100).contains(&charge) {
+            let charge = &packet.body["currentCharge"];
+            let charge = charge
+                .as_f64()
+                .or_else(|| charge.as_str()?.trim().parse().ok())?;
+            if charge != -1.0 && !(0.0..=100.0).contains(&charge) {
                 return None;
             }
-            let charging = packet
-                .body
-                .get("isCharging")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            Some(("battery", json!({"charge": charge, "charging": charging})))
+            let charging = &packet.body["isCharging"];
+            let charging = charging.as_bool().unwrap_or_else(|| {
+                if let Some(text) = charging.as_str() {
+                    let text = text.trim();
+                    text == "1"
+                        || text.eq_ignore_ascii_case("true")
+                        || text.eq_ignore_ascii_case("yes")
+                } else {
+                    charging.as_i64() == Some(1)
+                }
+            });
+            Some((
+                BATTERY_PLUGIN,
+                json!({"charge": charge as i64, "charging": charging}),
+            ))
         }
         CONNECTIVITY => {
             let reports = packet.body.get("signalStrengths")?.as_object()?;

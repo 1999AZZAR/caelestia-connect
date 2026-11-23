@@ -1,6 +1,6 @@
 use crate::{
     clipboard::{Clipboard, TEXT},
-    desktop::{BATTERY, CONNECTIVITY, RING},
+    desktop::{BATTERY, BATTERY_REQUEST, CONNECTIVITY, RING},
     media,
     wire::{self, PING, SHARE, VERSION},
 };
@@ -331,6 +331,7 @@ impl Config {
                 PING,
                 SHARE,
                 BATTERY,
+                BATTERY_REQUEST,
                 RING,
                 media::REQUEST,
                 media::INFO,

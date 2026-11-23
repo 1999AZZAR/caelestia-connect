@@ -111,6 +111,7 @@ fn forget(links: &mut Links, id: &str) -> Result<bool> {
         links.blocked.remove(id);
     }
     links.last_seen.remove(id);
+    links.reconnect_batteries.remove(id);
     forgotten
 }
 
@@ -131,6 +132,7 @@ impl State {
             }
             self.transfers.cancel_device(id);
         } else if !was_paired {
+            links.request_battery(id);
             links.start_media(id);
             newly_paired = true;
         }
@@ -232,6 +234,7 @@ impl State {
             }
             self.transfers.cancel_device(id);
         } else if !was_paired {
+            links.request_battery(id);
             links.start_media(id);
             newly_paired = true;
         }

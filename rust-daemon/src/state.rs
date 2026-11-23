@@ -12,7 +12,7 @@ use crate::{
     clipboard::{self, TEXT},
     commands as command,
     config::{Config, TrustStore, Trusted, validate_incoming_path},
-    desktop::{self, BATTERY, CONNECTIVITY, RING},
+    desktop::{self, BATTERY, BATTERY_PLUGIN, BATTERY_REQUEST, CONNECTIVITY, RING},
     media::{self, Media, local},
     phone_audio,
     share::{self, SharePeer},
@@ -26,12 +26,13 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::sync::{Semaphore, mpsc, oneshot, watch};
 
 const MAX_LINKS: usize = 64;
 const MAX_UNPAIRED: usize = 16;
+const BATTERY_RECONNECT_WINDOW: Duration = Duration::from_secs(30);
 static ART_DOWNLOADS: Semaphore = Semaphore::const_new(4);
 
 pub struct Transmission {
@@ -82,12 +83,27 @@ struct Link {
 struct Links {
     active: BTreeMap<String, Link>,
     last_seen: BTreeMap<String, u64>,
+    reconnect_batteries: BTreeMap<String, (Instant, Value)>,
     trust: TrustStore,
     blocked: BTreeSet<String>,
     next_serial: u64,
 }
 
 impl Links {
+    fn request_battery(&self, id: &str) {
+        if let Some(link) = self.active.get(id)
+            && !self.blocked.contains(id)
+            && self
+                .trust
+                .get(id)
+                .is_some_and(|entry| entry.enabled(BATTERY_PLUGIN))
+            && link.peer.sends(BATTERY)
+            && link.peer.accepts(BATTERY_REQUEST)
+        {
+            link.queue(Packet::new(BATTERY_REQUEST, json!({"request": true})));
+        }
+    }
+
     fn media_link(&mut self, id: &str) -> Option<(&mut Link, &Trusted)> {
         let trusted = self
             .trust
@@ -180,6 +196,7 @@ impl State {
             links: Mutex::new(Links {
                 active: BTreeMap::new(),
                 last_seen: BTreeMap::new(),
+                reconnect_batteries: BTreeMap::new(),
                 trust,
                 blocked: BTreeSet::new(),
                 next_serial: 0,
@@ -304,6 +321,28 @@ impl State {
                 .insert(peer.id.clone(), wire::timestamp_ms() / 1000);
         }
         let id = peer.id.clone();
+        let now = Instant::now();
+        links
+            .reconnect_batteries
+            .retain(|_, (until, _)| *until > now);
+        let remembered = links
+            .reconnect_batteries
+            .remove(&id)
+            .map(|(_, battery)| battery);
+        let mut status = BTreeMap::new();
+        if (peer.sends(BATTERY) || peer.accepts(BATTERY))
+            && links
+                .trust
+                .get(&id)
+                .is_some_and(|entry| entry.enabled(BATTERY_PLUGIN))
+            && let Some(battery) = links
+                .active
+                .get_mut(&id)
+                .and_then(|old| old.status.remove(BATTERY_PLUGIN))
+                .or(remembered)
+        {
+            status.insert(BATTERY_PLUGIN, battery);
+        }
         links.active.insert(
             id.clone(),
             Link {
@@ -313,7 +352,7 @@ impl State {
                 outbound,
                 pending: None,
                 pair_error: "",
-                status: BTreeMap::new(),
+                status,
                 notifications: Default::default(),
                 media: Media::default(),
                 remote_sinks: Default::default(),
@@ -322,6 +361,7 @@ impl State {
                 remote_commands: Default::default(),
             },
         );
+        links.request_battery(&id);
         links.start_media(&id);
         drop(links);
         if replacing {
@@ -342,12 +382,24 @@ impl State {
             .get(id)
             .is_some_and(|link| link.serial == serial)
         {
-            links.active.remove(id);
+            let battery = links
+                .active
+                .remove(id)
+                .and_then(|mut link| link.status.remove(BATTERY_PLUGIN));
             let paired = links.trust.get(id).is_some();
             if paired {
                 links
                     .last_seen
                     .insert(id.to_owned(), wire::timestamp_ms() / 1000);
+                if let Some(battery) = battery {
+                    let now = Instant::now();
+                    links
+                        .reconnect_batteries
+                        .retain(|_, (until, _)| *until > now);
+                    links
+                        .reconnect_batteries
+                        .insert(id.to_owned(), (now + BATTERY_RECONNECT_WINDOW, battery));
+                }
             }
             drop(links);
             self.transfers.cancel_device(id);
@@ -390,7 +442,11 @@ impl State {
         match packet.kind.as_str() {
             PING => trusted.is_some_and(|entry| entry.enabled("ping")),
             SHARE => trusted.is_some_and(|entry| entry.enabled("share")),
-            BATTERY => trusted.is_some_and(|entry| entry.enabled("battery")),
+            BATTERY => trusted.is_some_and(|entry| entry.enabled(BATTERY_PLUGIN)),
+            BATTERY_REQUEST => {
+                link.peer.accepts(BATTERY_REQUEST)
+                    && trusted.is_some_and(|entry| entry.enabled(BATTERY_PLUGIN))
+            }
             RING => trusted.is_some_and(|entry| entry.enabled("findmyphone")),
             TEXT => trusted.is_some_and(|entry| entry.enabled("clipboard")),
             command::LIST | command::OUTPUT => {
@@ -527,7 +583,7 @@ impl State {
         ensure!(
             matches!(
                 plugin,
-                "battery"
+                BATTERY_PLUGIN
                     | "clipboard"
                     | "connectivity_report"
                     | "findmyphone"
@@ -554,6 +610,9 @@ impl State {
         ensure!(!links.blocked.contains(id), "device is not paired");
         links.trust.set_enabled(id, plugin, enabled)?;
         if !enabled {
+            if plugin == BATTERY_PLUGIN {
+                links.reconnect_batteries.remove(id);
+            }
             if let Some(link) = links.active.get_mut(id) {
                 link.status.remove(plugin);
                 if plugin == media::PLUGIN {
@@ -575,8 +634,12 @@ impl State {
             if plugin == "share" {
                 self.transfers.cancel_device(id);
             }
-        } else if plugin == media::PLUGIN {
-            links.start_media(id);
+        } else {
+            match plugin {
+                BATTERY_PLUGIN => links.request_battery(id),
+                media::PLUGIN => links.start_media(id),
+                _ => (),
+            }
         }
         drop(links);
         if matches!(plugin, crate::messaging::SMS | crate::messaging::CONTACTS) {
@@ -813,7 +876,7 @@ impl State {
                 }
                 for (id, title, description, available) in [
                     (
-                        "battery",
+                        BATTERY_PLUGIN,
                         "Battery monitor",
                         "Show battery levels",
                         peer.sends(BATTERY) || peer.accepts(BATTERY),
@@ -944,7 +1007,7 @@ impl State {
             .filter(|(id, _)| links.trust.get(id).is_some() && !links.blocked.contains(*id))
             .map(|(_, link)| {
                 let name = &link.peer.name;
-                let battery = link.status.get("battery");
+                let battery = link.status.get(BATTERY_PLUGIN);
                 match battery
                     .and_then(|battery| battery.get("charge"))
                     .and_then(Value::as_i64)
@@ -1348,7 +1411,7 @@ impl State {
                         links
                             .trust
                             .get(id)
-                            .is_some_and(|entry| entry.enabled("battery"))
+                            .is_some_and(|entry| entry.enabled(BATTERY_PLUGIN))
                             && !links.blocked.contains(*id)
                             && link.peer.accepts(BATTERY)
                     })
@@ -1480,7 +1543,7 @@ impl State {
                     "sharing unavailable for this device"
                 ),
                 BATTERY => ensure!(
-                    trusted.enabled("battery") && link.peer.accepts(BATTERY),
+                    trusted.enabled(BATTERY_PLUGIN) && link.peer.accepts(BATTERY),
                     "battery sharing unavailable"
                 ),
                 TEXT => ensure!(
