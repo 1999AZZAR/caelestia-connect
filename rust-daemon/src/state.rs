@@ -1,4 +1,5 @@
 mod audio;
+mod commands;
 mod messaging;
 mod notifications;
 mod pairing;
@@ -9,6 +10,7 @@ pub use pairing::PairCommand;
 use crate::{
     audio as volume,
     clipboard::{self, TEXT},
+    commands as command,
     config::{Config, TrustStore, Trusted, validate_incoming_path},
     desktop::{self, BATTERY, CONNECTIVITY, RING},
     media::{self, Media, local},
@@ -73,6 +75,7 @@ struct Link {
     media: Media,
     remote_sinks: volume::Sinks,
     call_activity: Option<telephony::Activity>,
+    remote_commands: command::Remote,
 }
 
 struct Links {
@@ -157,6 +160,7 @@ pub struct State {
     messaging: std::sync::mpsc::SyncSender<crate::messaging::Request>,
     popups: mpsc::Sender<crate::notifications::Popup>,
     audio: mpsc::Sender<volume::Request>,
+    pub command_jobs: command::Jobs,
 }
 
 impl State {
@@ -188,6 +192,7 @@ impl State {
             messaging: workers.messaging,
             popups: workers.popups,
             audio: workers.audio,
+            command_jobs: Default::default(),
         }
     }
 
@@ -270,6 +275,7 @@ impl State {
                 media: Media::default(),
                 remote_sinks: Default::default(),
                 call_activity: None,
+                remote_commands: Default::default(),
             },
         );
         links.start_media(&id);
@@ -277,6 +283,7 @@ impl State {
         self.start_messaging(&id);
         self.start_notifications(&id);
         self.request_remote_sinks(&id);
+        self.start_commands(&id);
         self.changed();
         Ok(serial)
     }
@@ -331,6 +338,15 @@ impl State {
             BATTERY => trusted.is_some_and(|entry| entry.enabled("battery")),
             RING => trusted.is_some_and(|entry| entry.enabled("findmyphone")),
             TEXT => trusted.is_some_and(|entry| entry.enabled("clipboard")),
+            command::LIST | command::OUTPUT => {
+                link.peer.accepts(&packet.kind)
+                    && link.peer.supports_commands(command::LOCAL)
+                    && trusted.is_some_and(|entry| entry.enabled(command::LOCAL))
+            }
+            command::REQUEST => {
+                link.peer.supports_commands(command::REMOTE)
+                    && trusted.is_some_and(|entry| entry.enabled(command::REMOTE))
+            }
             volume::INFO => {
                 link.peer.supports_volume(volume::LOCAL)
                     && trusted.is_some_and(|entry| entry.enabled(volume::LOCAL))
@@ -472,6 +488,8 @@ impl State {
                     | volume::REMOTE
                     | telephony::PAUSE
                     | crate::idle::PLUGIN
+                    | command::LOCAL
+                    | command::REMOTE
             ),
             "plugin is unavailable"
         );
@@ -493,6 +511,9 @@ impl State {
                 if plugin == telephony::PAUSE {
                     link.call_activity = None;
                 }
+                if plugin == command::REMOTE {
+                    link.remote_commands = Default::default();
+                }
             }
             if plugin == "share" {
                 self.transfers.cancel_device(id);
@@ -509,6 +530,9 @@ impl State {
         }
         if enabled && plugin == volume::REMOTE {
             self.request_remote_sinks(id);
+        }
+        if enabled && matches!(plugin, command::LOCAL | command::REMOTE) {
+            self.start_commands(id);
         }
         self.changed();
         Ok(())
@@ -584,6 +608,27 @@ impl State {
             let mut supported = Vec::new();
             let mut plugin_state = json!({});
             if let (Some(trusted), Some(peer)) = (trusted, peer) {
+                if peer.supports_commands(command::LOCAL) {
+                    let enabled = trusted.enabled(command::LOCAL);
+                    supported.push(command::LOCAL);
+                    plugins.push(json!({"id": command::LOCAL, "name": "Run commands", "description": "Run predefined commands on this computer from the device",
+                        "enabled": enabled, "loaded": enabled,
+                        "settings": [{"key": "commands", "type": "commands", "label": "Commands", "default": command::defaults()}],
+                        "values": {"commands": trusted.local_commands}}));
+                    if enabled {
+                        plugin_state[command::LOCAL] = json!({"commands": command::definitions_snapshot(&trusted.local_commands)});
+                    }
+                }
+                if let Some(link) = link.filter(|link| link.peer.supports_commands(command::REMOTE))
+                {
+                    let enabled = trusted.enabled(command::REMOTE);
+                    supported.push(command::REMOTE);
+                    plugins.push(json!({"id": command::REMOTE, "name": "Remote commands", "description": "Trigger commands defined on the device",
+                        "enabled": enabled, "loaded": enabled, "settings": [], "values": {}}));
+                    if enabled {
+                        plugin_state[command::REMOTE] = link.remote_commands.snapshot();
+                    }
+                }
                 if peer.sends(telephony::EVENT) {
                     supported.push(telephony::PAUSE);
                     plugins.push(

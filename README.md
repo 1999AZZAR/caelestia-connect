@@ -89,7 +89,7 @@ Pairing data and configuration in `~/.config/caelestia-connect` are retained.
 
 ### Experimental Rust daemon
 
-The Rust backend uses the existing Python GTK interface. It supports IPv4 discovery, pairing, file transfers, link and text sharing, battery and mobile signal status, Ping, Ring device, manual clipboard sharing, media and system volume controls, Bluetooth audio routing, SMS/MMS and contacts, notifications from the phone, call alerts and media pause, and screensaver inhibition. You can run the Rust preview with a separate profile alongside the regular app. The backend guide lists the features still available through the Python daemon. [Rust backend guide](rust-daemon/README.md)
+The Rust backend uses the existing Python GTK interface. It supports IPv4 discovery, pairing, file transfers, link and text sharing, battery and mobile signal status, Ping, Ring device, manual clipboard sharing, media and system volume controls, Bluetooth audio routing, SMS/MMS and contacts, notifications from the phone, call alerts and media pause, screensaver inhibition, and predefined commands. You can run the Rust preview with a separate profile alongside the regular app. The backend guide lists the features still available through the Python daemon. [Rust backend guide](rust-daemon/README.md)
 
 ### Firewall
 

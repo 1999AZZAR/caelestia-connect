@@ -271,7 +271,9 @@ class DeviceSettings(Adw.PreferencesPage):
         for key, c in commands.items():
             if not isinstance(c, dict):
                 continue
-            row = Adw.ActionRow(title=c.get("name", key), subtitle=c.get("command", ""), subtitle_lines=2)
+            row = Adw.ActionRow(use_markup=False, subtitle_lines=2)
+            row.set_title(c.get("name", key))
+            row.set_subtitle(c.get("command", ""))
             rm = w.icon_button("delete", _("Remove"))
             rm.set_valign(Gtk.Align.CENTER)
             rm.connect("clicked", lambda *_a, k=key: self.app.plugin(dev, "runcommand", "remove_command", key=k))

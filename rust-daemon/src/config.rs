@@ -78,6 +78,7 @@ pub struct Trusted {
     pub notification_popups: bool,
     pub notification_copy_codes: bool,
     pub pause_music: crate::state::telephony::PauseSettings,
+    pub local_commands: crate::commands::Definitions,
 }
 
 impl Trusted {
@@ -319,6 +320,9 @@ impl Config {
                 BATTERY,
                 CONNECTIVITY,
                 crate::audio::INFO,
+                crate::commands::LIST,
+                crate::commands::REQUEST,
+                crate::commands::OUTPUT,
                 media::INFO,
                 media::REQUEST
             ]);
@@ -331,6 +335,14 @@ impl Config {
                 media::INFO,
                 crate::audio::REQUEST
             ]);
+            body["outgoingCapabilities"].as_array_mut().unwrap().extend(
+                [
+                    crate::commands::LIST,
+                    crate::commands::REQUEST,
+                    crate::commands::OUTPUT,
+                ]
+                .map(|kind| json!(kind)),
+            );
             if self.system_volume {
                 body["incomingCapabilities"]
                     .as_array_mut()
@@ -510,6 +522,12 @@ impl TrustStore {
             read_json(&self.directory.join("devices").join(id).join("config.json"))?;
         Ok(Trusted {
             record,
+            local_commands: crate::commands::load(
+                device
+                    .plugin_settings
+                    .get(crate::commands::LOCAL)
+                    .and_then(|settings| settings.get("commands")),
+            ),
             pause_music: crate::state::telephony::PauseSettings::read(
                 device.plugin_settings.get(crate::state::telephony::PAUSE),
             ),
@@ -620,6 +638,9 @@ impl TrustStore {
             (crate::state::telephony::PAUSE, key) => entry
                 .pause_music
                 .update(key, value.as_bool().unwrap_or_default()),
+            (crate::commands::LOCAL, "commands") => {
+                entry.local_commands = crate::commands::load(Some(&value))
+            }
             _ => unreachable!("unsupported feature setting"),
         }
         Ok(())

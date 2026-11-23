@@ -336,6 +336,12 @@ async fn dispatch(
                 (Some(crate::audio::REMOTE), Some(action)) => {
                     return Ok(json!(state.remote_volume_action(device, action, args)?));
                 }
+                (Some(crate::commands::LOCAL), Some(action)) => {
+                    return state.edit_local_commands(device, action, args);
+                }
+                (Some(crate::commands::REMOTE), Some(action)) => {
+                    return Ok(json!(state.remote_command_action(device, action, args)?));
+                }
                 (Some("findmyphone"), Some("ring")) => {
                     state
                         .send(device, wire::Packet::new(crate::desktop::RING, json!({})))

@@ -362,6 +362,10 @@ async fn serve_link(
                         state.receive_remote_sinks(&id, serial, packet.body);
                     } else if packet.kind == crate::audio::REQUEST {
                         state.receive_volume_request(&id, serial, packet.body);
+                    } else if packet.kind == crate::commands::REQUEST {
+                        state.receive_command_request(&id, serial, &packet.body);
+                    } else if matches!(packet.kind.as_str(), crate::commands::LIST | crate::commands::OUTPUT) {
+                        state.receive_command_state(&id, serial, packet);
                     } else {
                         state.receive_status(&id, serial, &packet);
                     }

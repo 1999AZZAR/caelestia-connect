@@ -42,7 +42,9 @@ The Notifications page shows phone notifications and supports actions, replies, 
 
 **Pause media during calls** can pause MPRIS players, mute system audio through `pactl`, and restore both when the call ends. **Prevent screensaver** is off by default and stays active only while an enabled device is connected. It uses Caelestia’s idle inhibitor when available, then tries the desktop ScreenSaver service or logind.
 
-The Python daemon still provides Bluetooth data transport, automatic and file clipboard sync, sending desktop notifications to the phone, call photos and local caller lookup, SFTP browsing, remote input and presentation controls, trusted commands, device locking and desktop ringing, screen mirroring, phone camera and webcam, and virtual monitors.
+**Run commands** keeps the predefined commands under **Settings → Features**. Paired devices trigger these commands by ID and can receive output and exit status. The daemon runs up to four commands at a time and stops each after two minutes. **Remote commands** shows commands offered by the peer on the device overview.
+
+The Python daemon still provides Bluetooth data transport, automatic and file clipboard sync, sending desktop notifications to the phone, call photos and local caller lookup, SFTP browsing, remote input and presentation controls, device locking and desktop ringing, screen mirroring, phone camera and webcam, and virtual monitors.
 
 ## Install the Rust user service
 

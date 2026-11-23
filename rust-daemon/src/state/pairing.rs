@@ -139,6 +139,7 @@ impl State {
             self.start_messaging(id);
             self.start_notifications(id);
             self.request_remote_sinks(id);
+            self.start_commands(id);
         }
         self.changed();
         result
@@ -153,6 +154,7 @@ impl State {
                 link.status.clear();
                 link.remote_sinks.clear();
                 link.call_activity = None;
+                link.remote_commands = Default::default();
                 link.notifications = Default::default();
                 if (removed || attempted) && send(link, false, None).is_err() {
                     links.active.remove(id);
@@ -238,6 +240,7 @@ impl State {
             self.start_messaging(id);
             self.start_notifications(id);
             self.request_remote_sinks(id);
+            self.start_commands(id);
         }
         self.changed();
         result
@@ -263,6 +266,7 @@ impl State {
             link.status.clear();
             link.remote_sinks.clear();
             link.call_activity = None;
+            link.remote_commands = Default::default();
             link.notifications = Default::default();
             finish(
                 link,

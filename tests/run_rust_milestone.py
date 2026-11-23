@@ -304,6 +304,8 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
             "pausemusic",
             "systemvolume",
             "remotesystemvolume",
+            "runcommand",
+            "remotecommands",
         }
         assert await send_ping(peer.device_id, "sent by Rust")
         await asyncio.to_thread(peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "sent by Rust")
@@ -311,6 +313,9 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
         await check_media(client, peer, gtk_action if check_gtk else None)
         await check_desktop_media(client, peer, certificate, me["id"], tcp)
         await check_volume(client, peer, certificate, me["id"], tcp, wait_for_device)
+        await check_commands(
+            client, peer, certificate, me["id"], tcp, wait_for_device, gtk_action if check_gtk else None
+        )
         await check_phone_audio(client, peer, wait_for_device)
         await check_messaging(client, peer, gtk_action if check_gtk else None)
         await check_notifications(client, peer, tray_record.parent, gtk_action if check_gtk else None)
@@ -1022,6 +1027,100 @@ async def check_volume(client, peer, certificate, desktop_id, tcp, wait_for_devi
     print("PASS system volume in both directions, sink updates, default output and unauthorized requests", flush=True)
 
 
+async def check_commands(client, peer, certificate, desktop_id, tcp, wait_for_device, gtk_action):
+    import shlex
+
+    info, request, output = (f"kdeconnect.runcommand{suffix}" for suffix in ("", ".request", ".output"))
+
+    async def wait_packet(kind, predicate):
+        return (await asyncio.to_thread(peer.wait_for, kind, predicate, 5))["body"]
+
+    async def action(plugin, verb, **args):
+        return await client.call("device.call", device=peer.device_id, plugin=plugin, action=verb, args=args)
+
+    mark = Path(os.environ["XDG_RUNTIME_DIR"]) / "started-command"
+    quoted = shlex.quote(str(mark))
+    assert await wait_packet(request, lambda body: body.get("requestCommandList"))
+    assert (await wait_packet(info, lambda body: "fixture" in json.loads(body["commandList"])))["canAddCommand"]
+    with phone(certificate) as unknown:
+        await asyncio.to_thread(unknown.connect_direct, tcp, desktop_id)
+        unknown.send(request, {"requestCommandList": True})
+        unknown.send(request, {"key": "fixture", "command": f"touch {quoted}"})
+        try:
+            await asyncio.to_thread(unknown.wait_for, info, timeout=0.5)
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError("unpaired peer received command definitions")
+    assert not mark.exists()
+
+    peer.send(request, {"key": "unknown", "command": f"touch {quoted}"})
+    peer.send(request, {"key": "fixture", "command": f"touch {quoted}"})
+    started = await wait_packet(output, lambda body: body.get("commandStarted"))
+    assert started["command"] == "printf 'saved\\n'; printf 'fixture error\\n' >&2"
+    assert await wait_packet(output, lambda body: body.get("id") == started["id"] and body.get("stdout") == ["saved"])
+    assert await wait_packet(
+        output, lambda body: body.get("id") == started["id"] and body.get("stderr") == ["fixture error"]
+    )
+    assert (await wait_packet(output, lambda body: body.get("id") == started["id"] and body.get("commandFinished")))[
+        "exitCode"
+    ] == 0
+    assert not mark.exists()
+
+    key = await action("runcommand", "add_command", name="Temporary job", command="true")
+    assert await action(
+        "runcommand", "edit_command", key=key, name="Cancelable job", command=f"(sleep 1; touch {quoted}) & wait"
+    )
+    peer.send(request, {"key": key})
+    started = await wait_packet(
+        output, lambda body: body.get("commandStarted") and str(mark) in body.get("command", "")
+    )
+    peer.send(request, {"stop": True})
+    finished = await wait_packet(output, lambda body: body.get("id") == started["id"] and body.get("commandFinished"))
+    assert finished["exitCode"] == 130
+    assert await action("runcommand", "remove_command", key=key)
+    assert not await action("runcommand", "remove_command", key=key)
+    assert await wait_packet(info, lambda body: list(json.loads(body["commandList"])) == ["fixture"])
+
+    peer.send(
+        info,
+        {
+            "commandList": json.dumps({"peer-fixture": {"name": "Fixture remote command", "command": "true"}}),
+            "canAddCommand": True,
+        },
+    )
+    await wait_for_device(peer.device_id, lambda d: d and d["state"].get("remotecommands", {}).get("commands"))
+    if gtk_action:
+        await gtk_action(peer.device_id, "commands")
+    else:
+        assert await action("remotecommands", "trigger", key="peer-fixture")
+    assert await wait_packet(request, lambda body: body.get("key") == "peer-fixture")
+    assert await action("remotecommands", "edit_commands")
+    assert await wait_packet(request, lambda body: body.get("setup") is True)
+    peer.send(output, {"commandStarted": True, "command": "true", "id": 2})
+    peer.send(output, {"stdout": ["Fixture output"], "id": 2})
+    peer.send(output, {"commandFinished": True, "exitCode": 0, "id": 2})
+    await wait_for_device(
+        peer.device_id,
+        lambda d: d
+        and d["state"].get("remotecommands", {}).get("output") == ["$ true", "Fixture output", "[exit code 0]"],
+    )
+    assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="runcommand", enabled=False)
+    peer.send(request, {"key": "fixture"})
+    try:
+        await asyncio.to_thread(peer.wait_for, output, lambda body: body.get("commandStarted"), 0.5)
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("a disabled command plugin started a job")
+    assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="runcommand", enabled=True)
+    assert not mark.exists()
+    print(
+        "PASS saved commands, local output, cancellation, remote command UI, and paired-device authorization",
+        flush=True,
+    )
+
+
 def seed_messages(peer):
     from caelestia_connect import config
 
@@ -1571,12 +1670,19 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
         assert not IPC_SOCKET.exists()
         peer.incoming_capabilities.append("kdeconnect.systemvolume.request")
         peer.outgoing_capabilities.append("kdeconnect.systemvolume")
+        peer.incoming_capabilities.append("kdeconnect.runcommand.request")
+        peer.outgoing_capabilities.extend(["kdeconnect.runcommand", "kdeconnect.runcommand.output"])
         seed_messages(peer)
         device_config = CONFIG_DIR / "devices" / peer.device_id / "config.json"
         device_config.parent.mkdir(parents=True, exist_ok=True)
         device_settings = json.loads(device_config.read_text()) if device_config.exists() else {}
         device_settings.setdefault("pluginSettings", {})["phoneaudio"] = {"address": TEST_AUDIO_ADDRESS}
         device_settings["pluginSettings"]["pausemusic"] = {"conditionTalking": True, "actionMute": True}
+        device_settings["pluginSettings"]["runcommand"] = {
+            "commands": {
+                "fixture": {"name": "Existing command", "command": "printf 'saved\\n'; printf 'fixture error\\n' >&2"}
+            }
+        }
         device_config.write_text(json.dumps(device_settings))
         saved = files_at(CONFIG_DIR)
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -1627,6 +1733,7 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
             previous["plugins"]["mprisremote"] = True
             previous["plugins"]["mpriscontrol"] = True
             previous["plugins"]["systemvolume"] = True
+            previous["plugins"]["runcommand"] = True
             previous["plugins"]["screensaver_inhibit"] = False
             previous.setdefault("pluginSettings", {})["mprisremote"] = {"hideIdle": False, "exportMpris": False}
             previous["pluginSettings"]["notifications"] = {"showPopups": False}
@@ -1708,12 +1815,12 @@ def run_gtk(device_id: str, action: str) -> int:
     clicked = False
     deadline = time.monotonic() + 5
 
-    def row_titles(widget):
+    def action_rows(widget):
         if isinstance(widget, Adw.ActionRow):
-            yield widget.get_title()
+            yield widget
         child = widget.get_first_child()
         while child:
-            yield from row_titles(child)
+            yield from action_rows(child)
             child = child.get_next_sibling()
 
     def activate_action():
@@ -1764,16 +1871,26 @@ def run_gtk(device_id: str, action: str) -> int:
                 button = None
             elif action == "audio-settings":
                 if page.device.get("id") == device_id and page.settings.get_mapped():
+                    rows = {row.get_title(): row for row in action_rows(page.settings)}
                     assert {
                         "System volume",
                         "Remote system volume",
                         "Pause media during calls",
                         "Prevent screensaver",
-                    } <= set(row_titles(page.settings))
+                        "Run commands",
+                        "Remote commands",
+                        "Existing command",
+                    } <= rows.keys()
+                    editor_row = rows["Existing command"]
+                    assert not editor_row.get_use_markup() and ">&2" in editor_row.get_subtitle()
                     clicked = True
                     GLib.timeout_add(100, app.quit)
                     return GLib.SOURCE_REMOVE
                 button = None
+            elif action == "commands":
+                group = page.overview.commands.get_last_child()
+                item = group.get_first_child() if isinstance(group, Gtk.FlowBox) else None
+                button = item.get_child() if item else None
             elif action in {"ping", "text", "preferences"}:
                 button = page.overview.action_buttons.get("ping" if action == "ping" else "send-text")
             else:
@@ -1831,6 +1948,7 @@ def main() -> int:
             "notifications",
             "call",
             "audio-settings",
+            "commands",
         ),
         default="ping",
         help=argparse.SUPPRESS,

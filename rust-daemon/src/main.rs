@@ -1,5 +1,6 @@
 mod audio;
 mod clipboard;
+mod commands;
 mod config;
 mod desktop;
 mod idle;
