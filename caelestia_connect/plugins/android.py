@@ -327,7 +327,9 @@ class AndroidPlugin(Plugin):
         return {"screenOn": self._screen_on}
 
     @action
-    async def camera(self, serial: str = "", facing: str = "") -> dict:
+    async def camera(self, serial: str = "", facing: str = "", mirror: bool = False) -> dict:
+        if not isinstance(mirror, bool):
+            return {"error": _("Expected an on/off value for Mirror preview.")}
         if facing in ("front", "back"):
             self.set_setting("facing", facing)
         serial = await self._resolve(serial)
@@ -337,7 +339,7 @@ class AndroidPlugin(Plugin):
             self.preview.cancel()
             await asyncio.gather(self.preview, return_exceptions=True)
         started = asyncio.get_running_loop().create_future()
-        self.preview = spawn(self._preview(serial, started), name="android:camera")
+        self.preview = spawn(self._preview(serial, started, mirror), name="android:camera")
         self.changed()
         if not await started:
             return {"error": _("Phone camera failed. Android 12 or newer is needed, and the camera must be free.")}
@@ -349,7 +351,7 @@ class AndroidPlugin(Plugin):
             self.preview.cancel()
             await asyncio.gather(self.preview, return_exceptions=True)
 
-    async def _preview(self, serial: str, started: asyncio.Future) -> None:
+    async def _preview(self, serial: str, started: asyncio.Future, mirror: bool) -> None:
         """A camera window that turns with the phone. The webcam lets go of the camera meanwhile."""
         self.webcam.preview = True
         process = None
@@ -371,9 +373,11 @@ class AndroidPlugin(Plugin):
                     if process is not None:
                         await android.stop_tool(process)
                     angle = (wanted, facing)
+                    # scrcpy flips before rotating. Reverse the rotation to mirror the upright view.
+                    display = f"flip{(-wanted) % 360}" if mirror and facing == "front" else str(wanted)
                     process = await android.start_tool(
                         "scrcpy", "--serial", serial, "--video-source=camera", f"--camera-facing={facing}",
-                        "--no-audio", "--max-size=1280", f"--display-orientation={wanted}",
+                        "--no-audio", "--max-size=1280", f"--display-orientation={display}",
                         f"--window-title={self.device.name}",
                     )  # fmt: skip
                     if not started.done():

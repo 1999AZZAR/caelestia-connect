@@ -60,11 +60,15 @@ def show(app, window, device: dict, camera: bool = False) -> None:
             picker = Adw.ComboRow(title=_("Android device"), model=Gtk.StringList.new(serials))
             group.add(picker)
         facing = None
+        mirror = None
         if camera:
             facing = Adw.ComboRow(title=_("Camera"), model=Gtk.StringList.new([_("Front camera"), _("Rear camera")]))
             settings = next((p.get("values") or {} for p in device["plugins"] if p["id"] == "android"), {})
             facing.set_selected(1 if settings.get("facing") == "back" else 0)
             group.add(facing)
+            mirror = Adw.SwitchRow(title=_("Mirror preview"), visible=facing.get_selected() == 0)
+            facing.connect("notify::selected", lambda row, _prop: mirror.set_visible(row.get_selected() == 0))
+            group.add(mirror)
         dialog.set_extra_child(group)
 
         webcam = device["state"].get("android", {}).get("webcam")
@@ -85,7 +89,15 @@ def show(app, window, device: dict, camera: bool = False) -> None:
             chosen = picker.get_selected_item().get_string() if picker else serial
             if camera:
                 lens = "back" if facing.get_selected() == 1 else "front"
-                app.plugin(dev, "android", "camera", serial=chosen, facing=lens, callback=report)
+                app.plugin(
+                    dev,
+                    "android",
+                    "camera",
+                    serial=chosen,
+                    facing=lens,
+                    mirror=lens == "front" and mirror.get_active(),
+                    callback=report,
+                )
             else:
                 app.plugin(dev, "android", "mirror", serial=chosen, callback=report)
 

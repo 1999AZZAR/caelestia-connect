@@ -10,6 +10,8 @@ import tempfile
 import time
 from pathlib import Path
 
+import pytest
+
 from android_tools import setup_android_tools
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -146,20 +148,21 @@ def test_mirroring() -> None:
     asyncio.run(run())
 
 
-def test_camera_preview_turns_with_the_phone() -> None:
+@pytest.mark.parametrize(("mirror", "portrait", "landscape"), [(False, "270", "180"), (True, "flip90", "flip180")])
+def test_camera_preview_turns_with_the_phone(mirror, portrait, landscape) -> None:
     async def run():
         adb_state(devices={"ZY22": "device"}, names={"ZY22": "Pixel 9"}, rotation=0)
         p = plugin()
-        assert await p.camera(facing="front") == {}
+        assert await p.camera(facing="front", mirror=mirror) == {}
         assert p.setting("facing") == "front" and p.state()["preview"]
         first = calls("scrcpy")[-1]
-        assert "--video-source=camera" in first and "--display-orientation=270" in first, first
+        assert "--video-source=camera" in first and f"--display-orientation={portrait}" in first, first
         state = json.loads((TMP / "adb.json").read_text())
         state["rotation"] = 1  # phone turned to landscape
         (TMP / "adb.json").write_text(json.dumps(state))
         await asyncio.sleep(2.5)
         second = calls("scrcpy")[-1]
-        assert "--display-orientation=180" in second, second
+        assert f"--display-orientation={landscape}" in second, second
         assert not alive(int(first.rsplit("pid=", 1)[1]))
         await p.stop_camera()
         assert not p.state()["preview"]
@@ -195,8 +198,9 @@ def test_camera_preview_retries_while_the_camera_is_closing() -> None:
         adb_state(devices={"ZY22": "device"}, names={"ZY22": "Pixel 9"})
         (TMP / "scrcpy.failonce").touch()
         p = plugin()
-        assert await p.camera(facing="back") == {}
+        assert await p.camera(facing="back", mirror=True) == {}
         assert len(calls("scrcpy")) == 2 and p.state()["preview"]
+        assert "--display-orientation=90" in calls("scrcpy")[-1]
         await p.stop_camera()
 
     asyncio.run(run())

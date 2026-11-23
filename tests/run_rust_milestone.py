@@ -632,20 +632,23 @@ async def check_android(client, peer, wait_for_device, root, gtk_action):
 
     configure(devices={}, mdns=["test _adb-tls-connect._tcp 127.0.0.1:43567"])
     assert (await action("scan"))["serial"] == "127.0.0.1:43567"
+    assert await action("camera", facing="front") == {}
+    assert "--display-orientation=270" in scrcpy()[-1]
+    await action("stop_camera")
     if gtk_action:
         await gtk_action(peer.device_id, "camera")
     else:
-        assert await action("camera", facing="front") == {}
+        assert await action("camera", facing="front", mirror=True) == {}
     await shown(preview=True)
     front = scrcpy()[-1]
     assert "--video-source=camera --camera-facing=front" in front
-    assert "--display-orientation=270" in front
+    assert "--display-orientation=flip90" in front
     configure(rotation=1)
     deadline = time.monotonic() + 10
-    while "--display-orientation=180" not in scrcpy()[-1]:
+    while "--display-orientation=flip180" not in scrcpy()[-1]:
         assert time.monotonic() < deadline, scrcpy()
         await asyncio.sleep(0.1)
-    assert await action("camera", facing="back") == {}
+    assert await action("camera", facing="back", mirror=True) == {}
     rear = scrcpy()[-1]
     assert "--camera-facing=back" in rear and "--display-orientation=180" in rear
     assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="android", enabled=False)
@@ -655,7 +658,7 @@ async def check_android(client, peer, wait_for_device, root, gtk_action):
         await asyncio.sleep(0.1)
     assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="android", enabled=True)
     await shown(preview=False)
-    print("PASS Rust wireless debugging, camera orientation, lens switching, and camera cleanup", flush=True)
+    print("PASS Rust wireless debugging, optional front camera mirroring, rotation, and cleanup", flush=True)
 
 
 async def check_file_sharing(client, peer):
@@ -2103,6 +2106,15 @@ def run_gtk(device_id: str, action: str) -> int:
                     if action == "camera" and isinstance(dialog, Adw.AlertDialog) and not camera_confirmed:
                         assert dialog.get_heading() == "Phone camera"
                         assert dialog.get_response_enabled("start")
+                        rows = list(action_rows(dialog.get_extra_child()))
+                        lens = next(row for row in rows if isinstance(row, Adw.ComboRow))
+                        mirror = next(row for row in rows if isinstance(row, Adw.SwitchRow))
+                        assert mirror.get_visible() and not mirror.get_active()
+                        lens.set_selected(1)
+                        assert not mirror.get_visible()
+                        lens.set_selected(0)
+                        assert mirror.get_visible()
+                        mirror.set_active(True)
                         dialog.emit("response", "start")
                         camera_confirmed = True
                 button = None

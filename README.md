@@ -115,6 +115,8 @@ Screen mirroring and the camera preview run via [scrcpy](https://github.com/Geny
 - **USB:** Enable *USB debugging* in Developer Options on the phone, plug in a USB cable, and approve the host prompt.
 - **Wi-Fi:** Enable *Wireless debugging* on the phone and pair once with `adb pair <ip>:<port>`. The daemon matches connected ADB devices by IP address or device name.
 
+In **Phone camera**, select **Front camera** to see the optional **Mirror preview** switch. It starts off for each preview.
+
 ### Mirroring controls
 
 While mirroring:

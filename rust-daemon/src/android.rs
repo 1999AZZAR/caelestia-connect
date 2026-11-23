@@ -184,6 +184,7 @@ struct Camera {
     serial: String,
     child: Child,
     facing: String,
+    mirror: bool,
     sensor: u16,
     rotation: u16,
     angle: u16,
@@ -373,13 +374,25 @@ fn orientation(facing: &str, sensor: u16, rotation: u16, extra: u16) -> u16 {
         % 360
 }
 
-async fn camera_child(phone: &Device, serial: &str, facing: &str, angle: u16) -> Result<Child> {
+async fn camera_child(
+    phone: &Device,
+    serial: &str,
+    facing: &str,
+    angle: u16,
+    mirror: bool,
+) -> Result<Child> {
+    let display = if mirror && facing == "front" {
+        // scrcpy flips before rotating. Reverse the rotation to mirror the upright view.
+        format!("flip{}", (360 - angle) % 360)
+    } else {
+        angle.to_string()
+    };
     let opts = [
         "--video-source=camera".into(),
         format!("--camera-facing={facing}"),
         "--no-audio".into(),
         "--max-size=1280".into(),
-        format!("--display-orientation={angle}"),
+        format!("--display-orientation={display}"),
         format!("--window-title={}", phone.name),
     ];
     let mut child = adb::scrcpy(serial, &opts).context(CAMERA_ERROR)?;
@@ -465,6 +478,7 @@ impl Session {
                 Ok(json!({"screenOn": self.view.screen_on}))
             }
             "camera" => {
+                let mirror = args.boolean("mirror")?.unwrap_or(false);
                 let entered = args.text("facing")?;
                 if !entered.is_empty() {
                     state.set_plugin_setting(id, PLUGIN, "facing", json!(entered))?;
@@ -483,12 +497,12 @@ impl Session {
                 let angle =
                     orientation(&facing, sensor, rotation, phone.options.number("rotation"));
                 state.android_device(id)?;
-                let child = match camera_child(&phone, &serial, &facing, angle).await {
+                let child = match camera_child(&phone, &serial, &facing, angle, mirror).await {
                     Ok(child) => child,
                     Err(_) => {
                         tokio::time::sleep(CAMERA_RELEASE).await;
                         state.android_device(id)?;
-                        camera_child(&phone, &serial, &facing, angle).await?
+                        camera_child(&phone, &serial, &facing, angle, mirror).await?
                     }
                 };
                 if let Err(error) = state.android_device(id) {
@@ -499,6 +513,7 @@ impl Session {
                     serial,
                     child,
                     facing,
+                    mirror,
                     sensor,
                     rotation,
                     angle,
@@ -555,7 +570,7 @@ impl Session {
             if facing_changed || angle != camera.angle {
                 adb::stop(camera.child).await;
                 tokio::time::sleep(CAMERA_RELEASE).await;
-                match camera_child(phone, &camera.serial, facing, angle).await {
+                match camera_child(phone, &camera.serial, facing, angle, camera.mirror).await {
                     Ok(next) => camera.child = next,
                     Err(_) => {
                         self.view.preview = false;
