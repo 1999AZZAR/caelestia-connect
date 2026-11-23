@@ -37,11 +37,13 @@ impl Links {
 
 impl State {
     pub fn network_frame_limit(&self, id: &str, serial: u64) -> usize {
-        let links = self.links.lock().unwrap();
+        let mut links = self.links.lock().unwrap();
         if links.messaging_allowed(id, serial, messages::SMS)
             || links.messaging_allowed(id, serial, messages::CONTACTS)
         {
             messages::FRAME_LIMIT
+        } else if links.call_link(id, Some(serial)).is_some() {
+            super::telephony::FRAME_LIMIT
         } else {
             wire::FRAME_LIMIT
         }

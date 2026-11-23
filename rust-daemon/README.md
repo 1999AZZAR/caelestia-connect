@@ -40,7 +40,7 @@ When the phone is paired in BlueZ and offers Bluetooth media audio, the media ca
 
 The Messages page reuses the existing SMS history, vCard contacts, and attachment cache with the regular profile. The isolated preview stores those under its own profile. MMS attachment limits are 4 MiB per outgoing message and 8 MiB per incoming attachment.
 
-The Notifications page shows phone notifications and supports actions, replies, and dismissal. Device settings control desktop popups and copying verification codes when you choose the corresponding notification action. Incoming calls show on the overview and offer **Mute call** in the desktop popup. The call handler uses the name supplied by the phone, then checks that device's synced contacts, then shows the phone number.
+The Notifications page shows phone notifications and supports actions, replies, and dismissal. Device settings control desktop popups and copying verification codes when you choose the corresponding notification action. Incoming calls show on the overview and offer **Mute call** in the desktop popup. The call handler uses the name supplied by the phone, then checks that device's synced contacts, then shows the phone number. Incoming and missed call popups show the contact photo when the phone supplies a supported thumbnail.
 
 **Pause media during calls** can pause MPRIS players, mute system audio through `pactl`, and restore both when the call ends. **Prevent screensaver** is off by default and stays active only while an enabled device is connected. It uses Caelestia’s idle inhibitor when available, then tries the desktop ScreenSaver service or logind.
 
@@ -48,7 +48,7 @@ The Notifications page shows phone notifications and supports actions, replies, 
 
 Rust starts scrcpy for **Mirror screen** and **Phone camera** in the existing GTK app. Pair the phone in Caelestia Connect and authorize USB or wireless debugging. Screen power controls keep the mirroring session open, including when scrcpy creates a virtual display. The camera preview follows phone rotation and uses the saved front or rear camera setting. These controls also work over USB when the paired phone is offline in Caelestia Connect.
 
-The Python daemon still provides Bluetooth data transport, automatic and file clipboard sync, sending desktop notifications to the phone, call photos, SFTP browsing, remote input and presentation controls, device locking and desktop ringing, the system-wide virtual webcam, and virtual monitors.
+The Python daemon still provides Bluetooth data transport, automatic and file clipboard sync, sending desktop notifications to the phone, SFTP browsing, remote input and presentation controls, device locking and desktop ringing, the system-wide virtual webcam, and virtual monitors.
 
 ## Install the Rust user service
 

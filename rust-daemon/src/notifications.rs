@@ -10,11 +10,13 @@ use dbus::{
     blocking::LocalConnection,
     message::MatchRule,
 };
+use image::{ImageFormat, ImageReader, Limits};
 use serde_json::{Value, json};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     env,
+    io::Cursor,
     path::{Path, PathBuf},
     rc::Rc,
     sync::{Arc, Weak},
@@ -43,6 +45,9 @@ const MAX_ICON: u64 = 512 * 1024;
 const PNG_HEADER: usize = 24;
 const MAX_ICON_EDGE: u32 = 1024;
 static ICON_TASKS: Semaphore = Semaphore::const_new(4);
+pub const MAX_CALL_THUMBNAIL: usize = 256 * 1024;
+const MAX_CALL_IMAGE_EDGE: u32 = 1024;
+const CALL_PREVIEW_EDGE: u32 = 128;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Key {
@@ -289,6 +294,7 @@ pub enum Popup {
         key: PopupKey,
         title: String,
         contact: String,
+        thumbnail: Option<String>,
     },
 }
 
@@ -489,11 +495,43 @@ fn escape(text: &str) -> String {
         .replace('>', "&gt;")
 }
 
+type ImageHint = (i32, i32, i32, bool, i32, i32, Vec<u8>);
+
+fn call_image(encoded: &str) -> Option<ImageHint> {
+    let compact: String = encoded
+        .chars()
+        .filter(|ch| !ch.is_ascii_whitespace())
+        .collect();
+    let bytes = openssl::base64::decode_block(&compact).ok()?;
+    let format = image::guess_format(&bytes).ok()?;
+    if !matches!(format, ImageFormat::Jpeg | ImageFormat::Png) {
+        return None;
+    }
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_CALL_IMAGE_EDGE);
+    limits.max_image_height = limits.max_image_width;
+    limits.max_alloc = Some(16 * 1024 * 1024);
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+    reader.limits(limits);
+    let image = reader.decode().ok()?;
+    let pixels = if image.width().max(image.height()) > CALL_PREVIEW_EDGE {
+        image
+            .thumbnail(CALL_PREVIEW_EDGE, CALL_PREVIEW_EDGE)
+            .into_rgba8()
+    } else {
+        image.into_rgba8()
+    };
+    let width = pixels.width() as i32;
+    let height = pixels.height() as i32;
+    Some((width, height, width * 4, true, 8, 4, pixels.into_raw()))
+}
+
 fn show_call(bus: &LocalConnection, popup: &Popup, replaces: u32) -> Result<u32> {
     let Popup::Call {
         key,
         title,
         contact,
+        thumbnail,
     } = popup
     else {
         unreachable!();
@@ -521,6 +559,9 @@ fn show_call(bus: &LocalConnection, popup: &Popup, replaces: u32) -> Result<u32>
     hints.insert("urgency".into(), Variant(Box::new(urgency)));
     hints.insert("category".into(), Variant(Box::new(category.to_owned())));
     hints.insert("resident".into(), Variant(Box::new(ringing)));
+    if let Some(image) = thumbnail.as_deref().and_then(call_image) {
+        hints.insert("image-data".into(), Variant(Box::new(image)));
+    }
     let server = bus.with_proxy(DESKTOP, DESKTOP_PATH, Duration::from_millis(750));
     let (id,) = server.method_call(
         DESKTOP,

@@ -14,6 +14,7 @@ import ssl
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -36,6 +37,13 @@ BUS_CONFIG = """<busconfig>
 """
 TEST_COVER = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQcGgAAAFkAOHHE8n2AAAAAElFTkSuQmCC"
+)
+TEST_CALL_PHOTO = (
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIs"
+    "IxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy"
+    "MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAADAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAA"
+    "AAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABQf/xAAUEQEAAAAAAAAAAAAAAAAA"
+    "AAAA/9oADAMBAAIRAxEAPwCSAHKU/9k="
 )
 TEST_AUDIO_ADDRESS = "02:11:22:33:44:55"
 TEST_AUDIO_UUID = "0000110a-0000-1000-8000-00805f9b34fb"
@@ -1563,20 +1571,26 @@ async def check_notifications(client, peer, root, gtk_action):
                     return call
                 await asyncio.sleep(0.05)
 
-    peer.send("kdeconnect.telephony", {"event": "ringing", "phoneNumber": "(555) 000-1234"})
+    async def call_popup(body, *, photo):
+        async with asyncio.timeout(5):
+            while True:
+                for token, popup in json.loads(data_file.read_text()).items():
+                    if popup["body"] == body and ("image" in popup) == photo:
+                        return token, popup
+                await asyncio.sleep(0.05)
+
+    thumbnail = "\n".join(textwrap.wrap(TEST_CALL_PHOTO, 76)) + "\n"
+    ring = {"event": "ringing", "phoneNumber": "(555) 000-1234"}
+    peer.send("kdeconnect.telephony", ring)
     assert (await call_status("ringing"))["contact"] == "Fixture Contact"
     if gtk_action:
         await gtk_action(peer.device_id, "call")
-    async with asyncio.timeout(5):
-        while True:
-            active = json.loads(data_file.read_text())
-            ringing = next(((key, popup) for key, popup in active.items() if popup["icon"] == "call-start"), None)
-            if ringing:
-                break
-            await asyncio.sleep(0.05)
-    call_token, ringing_popup = ringing
-    assert ringing_popup["body"] == "Incoming call from Fixture Contact"
+    call_token, ringing_popup = await call_popup("Incoming call from Fixture Contact", photo=False)
     assert ringing_popup["actions"] == ["mute", "Mute call"]
+    peer.send("kdeconnect.telephony", {**ring, "phoneThumbnail": thumbnail})
+    photo_token, ringing_popup = await call_popup("Incoming call from Fixture Contact", photo=True)
+    assert call_token == photo_token
+    assert ringing_popup["image"] == [2, 3, 8, True, 8, 4, 24]
     await asyncio.to_thread(trigger, "ActionInvoked", "mute", call_token)
     await asyncio.to_thread(
         peer.wait_for, "kdeconnect.telephony.request_mute", lambda body: body.get("action") == "mute"
@@ -1586,28 +1600,46 @@ async def check_notifications(client, peer, root, gtk_action):
     async with asyncio.timeout(5):
         while call_token in json.loads(data_file.read_text()):
             await asyncio.sleep(0.05)
-    peer.send("kdeconnect.telephony", {"event": "talking", "isCancel": True})
+    peer.send("kdeconnect.telephony", {"event": "talking", "isCancel": "true"})
     await call_status(None)
     peer.send(
-        "kdeconnect.telephony", {"event": "missedCall", "phoneNumber": SMS_NUMBER, "contactName": "Fixture Caller"}
+        "kdeconnect.telephony",
+        {
+            "event": "missedCall",
+            "phoneNumber": SMS_NUMBER,
+            "contactName": "Fixture Caller",
+            "phoneThumbnail": base64.b64encode(TEST_COVER).decode(),
+        },
     )
     assert (await call_status("missedCall"))["contact"] == "Fixture Caller"
-    async with asyncio.timeout(5):
-        while not any(
-            popup["body"] == "Missed call from Fixture Caller" for popup in json.loads(data_file.read_text()).values()
-        ):
-            await asyncio.sleep(0.05)
+    _, missed_popup = await call_popup("Missed call from Fixture Caller", photo=True)
+    assert missed_popup["image"] == [1, 1, 4, True, 8, 4, 4]
     peer.send("kdeconnect.telephony", {"event": "missedCall", "isCancel": True})
     await call_status(None)
     unknown = "+1 555 000 9876"
-    peer.send("kdeconnect.telephony", {"event": "missedCall", "phoneNumber": unknown})
+    peer.send("kdeconnect.telephony", {"event": "missedCall", "phoneNumber": unknown, "phoneThumbnail": "/9j/AA=="})
     assert (await call_status("missedCall"))["contact"] == unknown
-    async with asyncio.timeout(5):
-        while not any(
-            popup["body"] == f"Missed call from {unknown}" for popup in json.loads(data_file.read_text()).values()
-        ):
-            await asyncio.sleep(0.05)
-    print("PASS caller lookup, phone-supplied names, GTK call status, and desktop ringtone mute", flush=True)
+    _, fallback = await call_popup(f"Missed call from {unknown}", photo=False)
+    assert fallback["icon"] == "call-start"
+
+    for plugin in ("sms", "contacts"):
+        assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin=plugin, enabled=False)
+    missed = {"event": "missedCall", "phoneNumber": unknown}
+    peer.send(
+        "kdeconnect.telephony",
+        {**missed, "contactName": "Large call photo", "phoneThumbnail": thumbnail + " " * (64 * 1024)},
+    )
+    _, large_popup = await call_popup("Missed call from Large call photo", photo=True)
+    assert large_popup["image"] == [2, 3, 8, True, 8, 4, 24]
+    peer.send(
+        "kdeconnect.telephony",
+        {**missed, "contactName": "Oversized call photo", "phoneThumbnail": thumbnail + " " * (256 * 1024)},
+    )
+    _, fallback = await call_popup("Missed call from Oversized call photo", photo=False)
+    assert fallback["icon"] == "call-start"
+    for plugin in ("sms", "contacts"):
+        assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin=plugin, enabled=True)
+    print("PASS caller names and photos, invalid photo fallback, GTK call status, and ringtone mute", flush=True)
 
 
 def run_tray_watcher(record: Path):
@@ -1713,11 +1745,15 @@ def mock_notification_server(conn, Gio, GLib, path: Path):
         args = parameters.unpack()
         result = None
         if method == "Notify":
-            _app, replaces, icon, title, body, actions, _hints, _timeout = args
+            _app, replaces, icon, title, body, actions, hints, _timeout = args
             if not replaces:
                 sequence += 1
             notification = replaces or sequence
-            active[notification] = {"icon": icon, "title": title, "body": body, "actions": actions}
+            entry = {"icon": icon, "title": title, "body": body, "actions": actions}
+            if "image-data" in hints:
+                *layout, pixels = hints["image-data"]
+                entry["image"] = [*layout, len(pixels)]
+            active[notification] = entry
             result = GLib.Variant("(u)", (notification,))
         elif method == "CloseNotification":
             active.pop(args[0], None)
@@ -1944,6 +1980,8 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
             previous["plugins"]["runcommand"] = True
             previous["plugins"]["screensaver_inhibit"] = False
             previous["plugins"]["android"] = True
+            previous["plugins"]["sms"] = True
+            previous["plugins"]["contacts"] = True
             previous.setdefault("pluginSettings", {})["mprisremote"] = {"hideIdle": False, "exportMpris": False}
             previous["pluginSettings"]["notifications"] = {"showPopups": False}
             previous["pluginSettings"]["pausemusic"]["actionResume"] = True

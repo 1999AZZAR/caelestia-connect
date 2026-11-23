@@ -75,6 +75,7 @@ struct Link {
     media: Media,
     remote_sinks: volume::Sinks,
     call_activity: Option<telephony::Activity>,
+    call_thumbnail: Option<[u8; 32]>,
     remote_commands: command::Remote,
 }
 
@@ -317,6 +318,7 @@ impl State {
                 media: Media::default(),
                 remote_sinks: Default::default(),
                 call_activity: None,
+                call_thumbnail: None,
                 remote_commands: Default::default(),
             },
         );

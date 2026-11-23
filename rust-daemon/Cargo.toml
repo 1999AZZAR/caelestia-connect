@@ -10,6 +10,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 dbus = "0.9"
 dbus-crossroads = "0.5"
+image = { version = "0.25.9", default-features = false, features = ["jpeg", "png"] }
 libc = "0.2"
 mdns-sd = { version = "0.22", default-features = false, features = ["async"] }
 openssl = "0.10"

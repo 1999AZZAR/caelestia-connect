@@ -1,7 +1,7 @@
 use super::{Link, Links, State};
 use crate::{
-    notifications::{Popup, PopupKey},
-    wire::Packet,
+    notifications::{MAX_CALL_THUMBNAIL, Popup, PopupKey},
+    wire::{self, Packet},
 };
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
@@ -10,6 +10,7 @@ pub const PLUGIN: &str = "telephony";
 pub const EVENT: &str = "kdeconnect.telephony";
 pub const MUTE: &str = "kdeconnect.telephony.request_mute";
 pub const PAUSE: &str = "pausemusic";
+pub(super) const FRAME_LIMIT: usize = wire::FRAME_LIMIT + MAX_CALL_THUMBNAIL;
 
 fn call_text(text: &str) -> String {
     text.trim()
@@ -79,7 +80,7 @@ pub struct CallAudio {
 }
 
 impl Links {
-    fn call_link(&mut self, id: &str, serial: Option<u64>) -> Option<&mut Link> {
+    pub(super) fn call_link(&mut self, id: &str, serial: Option<u64>) -> Option<&mut Link> {
         if self.blocked.contains(id) || !self.trust.get(id)?.enabled(PLUGIN) {
             return None;
         }
@@ -120,7 +121,8 @@ impl State {
 
     pub async fn receive_call(&self, id: &str, serial: u64, body: &Value) {
         let event = body["event"].as_str().unwrap_or_default();
-        let canceled = body["isCancel"].as_bool() == Some(true);
+        let canceled =
+            body["isCancel"].as_bool() == Some(true) || body["isCancel"].as_str() == Some("true");
         let mut number = call_text(body["phoneNumber"].as_str().unwrap_or_default());
         let mut contact = call_text(body["contactName"].as_str().unwrap_or_default());
         let lookup = matches!(event, "ringing" | "missedCall")
@@ -174,6 +176,7 @@ impl State {
             return;
         }
         if canceled {
+            link.call_thumbnail = None;
             if link.status.remove(PLUGIN).is_some() {
                 self.changed();
             }
@@ -200,10 +203,21 @@ impl State {
         }
         let status =
             json!({"call": {"event": event, "number": number, "contact": contact, "photo": ""}});
-        if link.status.get(PLUGIN) == Some(&status) {
+        let changed = link.status.get(PLUGIN) != Some(&status);
+        let thumbnail = body["phoneThumbnail"].as_str().filter(|encoded| {
+            matches!(event, "ringing" | "missedCall")
+                && encoded.len() <= MAX_CALL_THUMBNAIL
+                && !encoded.trim().is_empty()
+        });
+        let digest = thumbnail.map(|encoded| openssl::sha::sha256(encoded.as_bytes()));
+        if !changed && (digest.is_none() || digest == link.call_thumbnail) {
             return;
         }
-        link.status.insert(PLUGIN, status);
+        if changed {
+            link.status.insert(PLUGIN, status);
+            link.call_thumbnail = None;
+            self.changed();
+        }
         let key = match event {
             "ringing" => Some(PopupKey::Call {
                 device: id.to_owned(),
@@ -215,14 +229,19 @@ impl State {
             }),
             _ => None,
         };
-        if let Some(key) = key {
-            let _ = self.popups.try_send(Popup::Call {
-                key,
-                title: link.peer.name.clone(),
-                contact,
-            });
+        if let Some(key) = key
+            && self
+                .popups
+                .try_send(Popup::Call {
+                    key,
+                    title: link.peer.name.clone(),
+                    contact,
+                    thumbnail: thumbnail.map(str::to_owned),
+                })
+                .is_ok()
+        {
+            link.call_thumbnail = digest;
         }
-        self.changed();
     }
 
     pub fn call_event(&self, id: &str, serial: u64, event: &str) -> bool {
