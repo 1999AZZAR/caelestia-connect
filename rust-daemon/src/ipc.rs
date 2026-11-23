@@ -333,6 +333,9 @@ async fn dispatch(
                 (Some(crate::state::telephony::PLUGIN), Some("mute")) => {
                     return Ok(json!(state.mute_call(device, None)?));
                 }
+                (Some(crate::audio::REMOTE), Some(action)) => {
+                    return Ok(json!(state.remote_volume_action(device, action, args)?));
+                }
                 (Some("findmyphone"), Some("ring")) => {
                     state
                         .send(device, wire::Packet::new(crate::desktop::RING, json!({})))

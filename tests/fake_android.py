@@ -134,6 +134,8 @@ class FakeAndroid:
         self.host_ip = host_ip
         self.daemon_cert_pem = daemon_cert_pem
         self.name = "Test Pixel"
+        self.incoming_capabilities = list(ANDROID_INCOMING)
+        self.outgoing_capabilities = list(ANDROID_OUTGOING)
         self.tls: ssl.SSLSocket | None = None
         self.received: list[dict] = []
         self.cond = threading.Condition()
@@ -145,8 +147,8 @@ class FakeAndroid:
             "deviceName": self.name,
             "deviceType": "phone",
             "protocolVersion": 8,
-            "incomingCapabilities": ANDROID_INCOMING,
-            "outgoingCapabilities": ANDROID_OUTGOING,
+            "incomingCapabilities": self.incoming_capabilities,
+            "outgoingCapabilities": self.outgoing_capabilities,
             **extra,
         }
 

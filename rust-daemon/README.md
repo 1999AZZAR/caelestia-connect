@@ -14,7 +14,7 @@ python3 tests/run_rust_milestone.py
 xvfb-run -a python3 tests/run_rust_milestone.py --gtk
 ```
 
-The test needs Python with the project's dependencies, `dbus-run-session`, and `curl`. It uses a simulated phone, a desktop media player, and a notification server in an isolated D-Bus session. The GTK test also exercises the regular client's overview, media card, Messages and Notifications pages. Use `--binary` to test a different build.
+The test needs Python with the project's dependencies, `dbus-run-session`, and `curl`. It uses a simulated phone, desktop media and audio outputs, and D-Bus services in an isolated session. The GTK test also exercises the regular client's overview, media card, Messages and Notifications pages. Use `--binary` to test a different build. If the regular daemon is already listening on UDP 1716, run the test in a network namespace with loopback enabled.
 
 ## Run the preview alongside the regular app
 
@@ -32,13 +32,17 @@ When the phone reports a media session, its track, album art, and playback contr
 
 The phone can also control this computer’s MPRIS players. Switch **Settings → Features → Multimedia control receiver** off for a device to stop sharing desktop playback with it. Desktop cover art can come from local files or HTTP(S) URLs. HTTP(S) cover art requires `curl`.
 
+**System volume** lets a paired device list audio outputs, change their volume and mute state, or select the default output. It uses `pactl` and accepts volume up to 100%. **Remote system volume** exposes output status and volume and mute commands for peers that offer the reverse direction.
+
 When the phone is paired in BlueZ and offers Bluetooth media audio, the media card can switch playback between the phone and this computer. Rust matches the saved Bluetooth address or a unique device name.
 
 The Messages page reuses the existing SMS history, vCard contacts, and attachment cache with the regular profile. The isolated preview stores those under its own profile. MMS attachment limits are 4 MiB per outgoing message and 8 MiB per incoming attachment.
 
 The Notifications page shows phone notifications and supports actions, replies, and dismissal. Device settings control desktop popups and copying verification codes when you choose the corresponding notification action. Incoming calls show on the overview and offer **Mute call** in the desktop popup. The Rust call handler currently uses caller names supplied by the phone and falls back to the phone number.
 
-The Python daemon still provides Bluetooth data transport, automatic and file clipboard sync, sending desktop notifications to the phone, pausing or muting desktop media during calls, call photos and local caller lookup, SFTP browsing, system volume controls, remote input and presentation controls, trusted commands, device locking and desktop ringing, screensaver inhibition, screen mirroring, phone camera and webcam, and virtual monitors.
+**Pause media during calls** can pause MPRIS players, mute system audio through `pactl`, and restore both when the call ends. **Prevent screensaver** is off by default and stays active only while an enabled device is connected. It uses Caelestia’s idle inhibitor when available, then tries the desktop ScreenSaver service or logind.
+
+The Python daemon still provides Bluetooth data transport, automatic and file clipboard sync, sending desktop notifications to the phone, call photos and local caller lookup, SFTP browsing, remote input and presentation controls, trusted commands, device locking and desktop ringing, screen mirroring, phone camera and webcam, and virtual monitors.
 
 ## Install the Rust user service
 

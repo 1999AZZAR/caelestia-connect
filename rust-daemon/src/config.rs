@@ -77,11 +77,15 @@ pub struct Trusted {
     pub phone_audio_address: String,
     pub notification_popups: bool,
     pub notification_copy_codes: bool,
+    pub pause_music: crate::state::telephony::PauseSettings,
 }
 
 impl Trusted {
     pub fn enabled(&self, plugin: &str) -> bool {
-        self.plugins.get(plugin).copied().unwrap_or(true)
+        self.plugins
+            .get(plugin)
+            .copied()
+            .unwrap_or(plugin != crate::idle::PLUGIN)
     }
 }
 
@@ -90,6 +94,7 @@ pub struct Config {
     pub fingerprint: String,
     pub public_key: Vec<u8>,
     pub clipboard: Option<Clipboard>,
+    pub system_volume: bool,
     directory: PathBuf,
     default_name: String,
     settings: Mutex<Settings>,
@@ -297,6 +302,7 @@ impl Config {
                 tls: tls.build(),
                 downloads: default_downloads(),
                 clipboard: Clipboard::detect(),
+                system_volume: crate::audio::available(),
             },
             trust,
         ))
@@ -312,11 +318,29 @@ impl Config {
                 SHARE,
                 BATTERY,
                 CONNECTIVITY,
+                crate::audio::INFO,
                 media::INFO,
                 media::REQUEST
             ]);
-            body["outgoingCapabilities"] =
-                json!([PING, SHARE, BATTERY, RING, media::REQUEST, media::INFO]);
+            body["outgoingCapabilities"] = json!([
+                PING,
+                SHARE,
+                BATTERY,
+                RING,
+                media::REQUEST,
+                media::INFO,
+                crate::audio::REQUEST
+            ]);
+            if self.system_volume {
+                body["incomingCapabilities"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!(crate::audio::REQUEST));
+                body["outgoingCapabilities"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!(crate::audio::INFO));
+            }
             body["incomingCapabilities"]
                 .as_array_mut()
                 .unwrap()
@@ -486,6 +510,9 @@ impl TrustStore {
             read_json(&self.directory.join("devices").join(id).join("config.json"))?;
         Ok(Trusted {
             record,
+            pause_music: crate::state::telephony::PauseSettings::read(
+                device.plugin_settings.get(crate::state::telephony::PAUSE),
+            ),
             certificate: cert.to_der()?,
             fingerprint: fingerprint(&cert)?,
             name: fields
@@ -590,6 +617,9 @@ impl TrustStore {
             (crate::notifications::PLUGIN, "copyAuthCodes") => {
                 entry.notification_copy_codes = value.as_bool().unwrap_or(true)
             }
+            (crate::state::telephony::PAUSE, key) => entry
+                .pause_music
+                .update(key, value.as_bool().unwrap_or_default()),
             _ => unreachable!("unsupported feature setting"),
         }
         Ok(())

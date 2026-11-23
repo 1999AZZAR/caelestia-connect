@@ -358,6 +358,10 @@ async fn serve_link(
                         state.receive_notification(&id, serial, packet);
                     } else if packet.kind == crate::state::telephony::EVENT {
                         state.receive_call(&id, serial, &packet.body);
+                    } else if packet.kind == crate::audio::INFO {
+                        state.receive_remote_sinks(&id, serial, packet.body);
+                    } else if packet.kind == crate::audio::REQUEST {
+                        state.receive_volume_request(&id, serial, packet.body);
                     } else {
                         state.receive_status(&id, serial, &packet);
                     }

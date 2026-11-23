@@ -138,6 +138,7 @@ impl State {
         if newly_paired {
             self.start_messaging(id);
             self.start_notifications(id);
+            self.request_remote_sinks(id);
         }
         self.changed();
         result
@@ -150,6 +151,8 @@ impl State {
                 let attempted = link.pending.is_some();
                 finish(link, "");
                 link.status.clear();
+                link.remote_sinks.clear();
+                link.call_activity = None;
                 link.notifications = Default::default();
                 if (removed || attempted) && send(link, false, None).is_err() {
                     links.active.remove(id);
@@ -234,6 +237,7 @@ impl State {
         if newly_paired {
             self.start_messaging(id);
             self.start_notifications(id);
+            self.request_remote_sinks(id);
         }
         self.changed();
         result
@@ -257,6 +261,8 @@ impl State {
         let direction = link.pending.as_ref().map(|pending| pending.direction);
         if !wants_pair {
             link.status.clear();
+            link.remote_sinks.clear();
+            link.call_activity = None;
             link.notifications = Default::default();
             finish(
                 link,

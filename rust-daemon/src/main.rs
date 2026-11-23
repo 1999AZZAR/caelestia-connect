@@ -1,6 +1,8 @@
+mod audio;
 mod clipboard;
 mod config;
 mod desktop;
+mod idle;
 mod ipc;
 mod lan;
 mod mdns;
@@ -24,7 +26,7 @@ use tokio::{
         self,
         unix::{SignalKind, signal as unix_signal},
     },
-    sync::mpsc,
+    sync::{mpsc, watch},
 };
 
 #[derive(Parser)]
@@ -109,6 +111,7 @@ async fn main() -> Result<()> {
     let (ipc, socket, uid) = ipc::listen()?;
     let (local_media, media_requests) = mpsc::channel(32);
     let (phone_audio, audio_requests) = mpsc::channel(8);
+    let (audio, volume_requests) = mpsc::channel(32);
     let (messaging, message_requests) = std::sync::mpsc::sync_channel(16);
     let (notifications, popups) = mpsc::channel(32);
     let state = Arc::new(state::State::new(
@@ -121,6 +124,7 @@ async fn main() -> Result<()> {
             phone_audio,
             messaging,
             popups: notifications,
+            audio,
         },
     ));
     let (refresh, scan) = mpsc::channel(1);
@@ -128,7 +132,17 @@ async fn main() -> Result<()> {
         "Experimental Caelestia Connect daemon listening on {}:{port}",
         args.bind
     );
-    tokio::select! {
+    let (background_alive, audio_shutdown) = watch::channel(());
+    let idle_service = Arc::clone(&state);
+    let idle_shutdown = audio_shutdown.clone();
+    let idle_worker = tokio::spawn(async move { idle::run(&idle_service, idle_shutdown).await });
+    let service = Arc::clone(&state);
+    let audio_worker = tokio::spawn(async move {
+        if service.config.system_volume {
+            audio::run(&service, volume_requests, audio_shutdown).await;
+        }
+    });
+    let result = tokio::select! {
         result = lan::run(state.clone(), tcp, udp, args.bind, scan) => result,
         result = ipc::run(ipc, uid, state.clone(), refresh) => result,
         _ = state.expire_pairings() => Ok(()),
@@ -144,5 +158,8 @@ async fn main() -> Result<()> {
         _ = tray::run(&state), if !args.no_tray => Ok(()),
         result = signal::ctrl_c() => result.context("listen for SIGINT"),
         _ = terminate.recv() => Ok(()),
-    }
+    };
+    drop(background_alive);
+    tokio::try_join!(audio_worker, idle_worker)?;
+    result
 }

@@ -54,6 +54,67 @@ struct Player {
     owner: String,
 }
 
+#[derive(Default)]
+struct CallPlayback {
+    restore: Option<bool>,
+    seen: BTreeSet<String>,
+    paused: BTreeMap<String, &'static str>,
+}
+
+impl CallPlayback {
+    fn update(
+        &mut self,
+        bus: &LocalConnection,
+        players: &BTreeMap<String, Player>,
+        requested: Option<bool>,
+    ) {
+        let Some(restore) = requested else {
+            if self.restore.take() == Some(true) {
+                for (owner, expected) in &self.paused {
+                    let proxy = bus.with_proxy(owner.as_str(), OBJECT, DBUS_TIMEOUT);
+                    if property::<String>(&proxy, PLAYER, "PlaybackStatus").as_deref()
+                        == Some(expected)
+                    {
+                        call(&proxy, "Play", ());
+                    }
+                }
+            }
+            self.seen.clear();
+            self.paused.clear();
+            return;
+        };
+        self.restore = Some(self.restore.unwrap_or(true) && restore);
+        self.seen
+            .retain(|owner| players.values().any(|player| player.owner == *owner));
+        self.paused.retain(|owner, _| self.seen.contains(owner));
+        for player in players
+            .values()
+            .filter(|player| !self.seen.contains(&player.owner))
+            .collect::<Vec<_>>()
+        {
+            self.seen.insert(player.owner.clone());
+            let proxy = bus.with_proxy(player.owner.as_str(), OBJECT, DBUS_TIMEOUT);
+            let Some(props) = properties(&proxy) else {
+                continue;
+            };
+            if arg::prop_cast::<String>(&props, "PlaybackStatus")
+                .is_none_or(|status| status != "Playing")
+                || arg::prop_cast::<bool>(&props, "CanControl") == Some(&false)
+            {
+                continue;
+            }
+            let (method, reached) = if arg::prop_cast::<bool>(&props, "CanPause") == Some(&false) {
+                ("Stop", "Stopped")
+            } else {
+                ("Pause", "Paused")
+            };
+            if proxy.method_call::<(), _, _, _>(PLAYER, method, ()).is_ok() {
+                self.paused.insert(player.owner.clone(), reached);
+            }
+        }
+    }
+}
+
 fn wanted(service: &str) -> bool {
     service.strip_prefix(PREFIX).is_some_and(|name| {
         !name.starts_with("caelestiaconnect.")
@@ -421,13 +482,15 @@ fn serve(
     let mut players = BTreeMap::new();
     let mut previous = Targets::new();
     let mut last_scan = None::<Instant>;
+    let mut calls = CallPlayback::default();
     while alive.has_changed().is_ok() {
         let Some(state) = state.upgrade() else {
             break;
         };
         let targets = state.local_media_targets();
+        let pause = state.call_audio().pause;
         let pending = signals.take();
-        if targets.is_empty() {
+        if targets.is_empty() && pause.is_none() {
             players.clear();
             last_scan = None;
         } else {
@@ -467,6 +530,7 @@ fn serve(
                 }
             }
         }
+        calls.update(&bus, &players, pause);
         previous = targets;
         for _ in 0..4 {
             let Ok(request) = requests.try_recv() else {
@@ -477,6 +541,7 @@ fn serve(
         drop(state);
         bus.process(Duration::from_millis(75))?;
     }
+    calls.update(&bus, &players, None);
     Ok(())
 }
 

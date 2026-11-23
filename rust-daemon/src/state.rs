@@ -1,3 +1,4 @@
+mod audio;
 mod messaging;
 mod notifications;
 mod pairing;
@@ -6,6 +7,7 @@ pub mod telephony;
 pub use pairing::PairCommand;
 
 use crate::{
+    audio as volume,
     clipboard::{self, TEXT},
     config::{Config, TrustStore, Trusted, validate_incoming_path},
     desktop::{self, BATTERY, CONNECTIVITY, RING},
@@ -69,6 +71,8 @@ struct Link {
     status: BTreeMap<&'static str, Value>,
     notifications: crate::notifications::Inbox,
     media: Media,
+    remote_sinks: volume::Sinks,
+    call_activity: Option<telephony::Activity>,
 }
 
 struct Links {
@@ -136,6 +140,7 @@ pub struct Workers {
     pub phone_audio: mpsc::Sender<phone_audio::Request>,
     pub messaging: std::sync::mpsc::SyncSender<crate::messaging::Request>,
     pub popups: mpsc::Sender<crate::notifications::Popup>,
+    pub audio: mpsc::Sender<volume::Request>,
 }
 
 pub struct State {
@@ -151,6 +156,7 @@ pub struct State {
     audio_devices: Mutex<Vec<phone_audio::Phone>>,
     messaging: std::sync::mpsc::SyncSender<crate::messaging::Request>,
     popups: mpsc::Sender<crate::notifications::Popup>,
+    audio: mpsc::Sender<volume::Request>,
 }
 
 impl State {
@@ -181,11 +187,24 @@ impl State {
             audio_devices: Mutex::new(Vec::new()),
             messaging: workers.messaging,
             popups: workers.popups,
+            audio: workers.audio,
         }
     }
 
     pub fn subscribe(&self) -> watch::Receiver<u64> {
         self.revision.subscribe()
+    }
+
+    pub fn wants_idle_inhibition(&self) -> bool {
+        let links = self.links.lock().unwrap();
+        links.active.iter().any(|(id, link)| {
+            link.peer.accepts(PING)
+                && !links.blocked.contains(id)
+                && links
+                    .trust
+                    .get(id)
+                    .is_some_and(|entry| entry.enabled(crate::idle::PLUGIN))
+        })
     }
 
     fn changed(&self) {
@@ -249,12 +268,15 @@ impl State {
                 status: BTreeMap::new(),
                 notifications: Default::default(),
                 media: Media::default(),
+                remote_sinks: Default::default(),
+                call_activity: None,
             },
         );
         links.start_media(&id);
         drop(links);
         self.start_messaging(&id);
         self.start_notifications(&id);
+        self.request_remote_sinks(&id);
         self.changed();
         Ok(serial)
     }
@@ -309,6 +331,14 @@ impl State {
             BATTERY => trusted.is_some_and(|entry| entry.enabled("battery")),
             RING => trusted.is_some_and(|entry| entry.enabled("findmyphone")),
             TEXT => trusted.is_some_and(|entry| entry.enabled("clipboard")),
+            volume::INFO => {
+                link.peer.supports_volume(volume::LOCAL)
+                    && trusted.is_some_and(|entry| entry.enabled(volume::LOCAL))
+            }
+            volume::REQUEST => {
+                link.peer.supports_volume(volume::REMOTE)
+                    && trusted.is_some_and(|entry| entry.enabled(volume::REMOTE))
+            }
             telephony::MUTE => {
                 link.peer.accepts(telephony::MUTE)
                     && trusted.is_some_and(|entry| entry.enabled(telephony::PLUGIN))
@@ -404,6 +434,10 @@ impl State {
             }
             ("share", "openUrls")
             | (media::PLUGIN, "hideIdle" | "exportMpris")
+            | (
+                telephony::PAUSE,
+                "conditionTalking" | "actionPause" | "actionMute" | "actionResume",
+            )
             | (crate::notifications::PLUGIN, "showPopups" | "copyAuthCodes") => {
                 ensure!(value.is_boolean(), "expected an on/off value")
             }
@@ -434,6 +468,10 @@ impl State {
                     | crate::messaging::CONTACTS
                     | crate::notifications::PLUGIN
                     | telephony::PLUGIN
+                    | volume::LOCAL
+                    | volume::REMOTE
+                    | telephony::PAUSE
+                    | crate::idle::PLUGIN
             ),
             "plugin is unavailable"
         );
@@ -449,6 +487,12 @@ impl State {
                 if plugin == crate::notifications::PLUGIN {
                     link.notifications = Default::default();
                 }
+                if plugin == volume::REMOTE {
+                    link.remote_sinks.clear();
+                }
+                if plugin == telephony::PAUSE {
+                    link.call_activity = None;
+                }
             }
             if plugin == "share" {
                 self.transfers.cancel_device(id);
@@ -462,6 +506,9 @@ impl State {
         }
         if enabled && plugin == crate::notifications::PLUGIN {
             self.start_notifications(id);
+        }
+        if enabled && plugin == volume::REMOTE {
+            self.request_remote_sinks(id);
         }
         self.changed();
         Ok(())
@@ -537,6 +584,42 @@ impl State {
             let mut supported = Vec::new();
             let mut plugin_state = json!({});
             if let (Some(trusted), Some(peer)) = (trusted, peer) {
+                if peer.sends(telephony::EVENT) {
+                    supported.push(telephony::PAUSE);
+                    plugins.push(
+                        trusted
+                            .pause_music
+                            .schema(trusted.enabled(telephony::PAUSE)),
+                    );
+                }
+                for (id, title, description, available) in [
+                    (
+                        volume::LOCAL,
+                        "System volume",
+                        "Control this computer's volume from the device",
+                        self.config.system_volume && peer.supports_volume(volume::LOCAL),
+                    ),
+                    (
+                        volume::REMOTE,
+                        "Remote system volume",
+                        "Control the device's volume",
+                        peer.supports_volume(volume::REMOTE),
+                    ),
+                ] {
+                    if !available {
+                        continue;
+                    }
+                    let enabled = trusted.enabled(id);
+                    supported.push(id);
+                    plugins.push(json!({"id": id, "name": title, "description": description,
+                        "enabled": enabled, "loaded": enabled, "settings": [], "values": {}}));
+                    if id == volume::REMOTE && enabled {
+                        if let Some(link) = link {
+                            plugin_state[id] =
+                                json!({"sinks": link.remote_sinks.values().collect::<Vec<_>>()});
+                        }
+                    }
+                }
                 if let Some(link) = link.filter(|link| link.peer.supports_notification_sync()) {
                     let enabled = trusted.enabled(crate::notifications::PLUGIN);
                     supported.push(crate::notifications::PLUGIN);
@@ -642,6 +725,12 @@ impl State {
                         "Telephony integration",
                         "Show notifications for calls",
                         peer.sends(telephony::EVENT),
+                    ),
+                    (
+                        crate::idle::PLUGIN,
+                        "Prevent screensaver",
+                        "Keep the screen awake while the device is connected",
+                        peer.accepts(PING),
                     ),
                 ] {
                     if !available {

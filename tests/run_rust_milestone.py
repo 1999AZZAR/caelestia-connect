@@ -301,15 +301,31 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
             "contacts",
             "notifications",
             "telephony",
+            "pausemusic",
+            "systemvolume",
+            "remotesystemvolume",
         }
         assert await send_ping(peer.device_id, "sent by Rust")
         await asyncio.to_thread(peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "sent by Rust")
         print("PASS UDP discovery, Python pairing reuse, subscription, and ping delivery", flush=True)
         await check_media(client, peer, gtk_action if check_gtk else None)
         await check_desktop_media(client, peer, certificate, me["id"], tcp)
+        await check_volume(client, peer, certificate, me["id"], tcp, wait_for_device)
         await check_phone_audio(client, peer, wait_for_device)
         await check_messaging(client, peer, gtk_action if check_gtk else None)
         await check_notifications(client, peer, tray_record.parent, gtk_action if check_gtk else None)
+        inhibitor = tray_record.parent / "inhibitor"
+        assert not inhibitor.exists()
+
+        async def expect_inhibit(active):
+            async with asyncio.timeout(5):
+                while not inhibitor.exists() or json.loads(inhibitor.read_text())["active"] != active:
+                    await asyncio.sleep(0.04)
+
+        async def set_inhibit(enabled):
+            assert await client.call(
+                "device.setPluginEnabled", device=peer.device_id, plugin="screensaver_inhibit", enabled=enabled
+            )
 
         assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="ping", enabled=False)
         try:
@@ -360,6 +376,7 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
         print("PASS outbound link sharing and file URL rejection", flush=True)
 
         if check_gtk:
+            await gtk_action(peer.device_id, "audio-settings")
             await gtk_action(peer.device_id, "preferences")
             await gtk_action(peer.device_id, "ping")
             await asyncio.to_thread(peer.wait_for, "kdeconnect.ping", lambda body: not body, 10)
@@ -370,10 +387,18 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
             )
             print("PASS GTK preview sends Unicode text and exposes file sending", flush=True)
 
+        await set_inhibit(True)
+        await expect_inhibit(True)
         disconnect(peer)
         await wait_for_device(peer.device_id, lambda d: d and not d["reachable"])
+        await expect_inhibit(False)
         await asyncio.to_thread(peer.connect_direct, tcp, me["id"])
         await wait_for_device(peer.device_id, lambda d: d and d["reachable"])
+        await expect_inhibit(True)
+        await set_inhibit(False)
+        await expect_inhibit(False)
+        assert json.loads(inhibitor.read_text())["acquisitions"] == 2
+        print("PASS idle inhibition starts only when enabled and follows the connection lifecycle", flush=True)
         assert await send_ping(peer.device_id, "direct reconnect")
         await asyncio.to_thread(
             peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "direct reconnect"
@@ -795,6 +820,7 @@ async def check_desktop_media(client, peer, certificate, desktop_id, tcp):
             assert (root / "actions.jsonl").read_text().splitlines() == actions
             await enabled(True)
             await receive(playerList=[name])
+            await check_call_audio(client, peer, root, name)
         finally:
             if player.returncode is None:
                 player.terminate()
@@ -821,6 +847,8 @@ def run_mpris_fixture(root: Path, web_url: str) -> None:
             self.record(action)
             if action == "Pause":
                 player.update(PlaybackStatus="Paused")
+            if action == "Play":
+                player.update(PlaybackStatus="Playing")
             if action == "Next":
                 player.update(Metadata={**metadata, "mpris:artUrl": web_url})
 
@@ -867,6 +895,131 @@ def run_mpris_fixture(root: Path, web_url: str) -> None:
 
 def files_at(path: Path) -> dict[Path, bytes]:
     return {file.relative_to(path): file.read_bytes() for file in path.rglob("*") if file.is_file()}
+
+
+async def check_call_audio(client, peer, root, player):
+    async def features(**settings):
+        for key, value in settings.items():
+            assert await client.call(
+                "device.setPluginSetting", device=peer.device_id, plugin="pausemusic", key=key, value=value
+            )
+
+    def event(event, **body):
+        peer.send("kdeconnect.telephony", {"event": event, **body})
+
+    audio = Path(os.environ["CC_TEST_AUDIO"])
+
+    async def muted(primary):
+        async with asyncio.timeout(5):
+            while any(
+                sink["mute"] != (primary if sink["name"] == "main" else True)
+                for sink in json.loads(audio.read_text())["sinks"]
+            ):
+                await asyncio.sleep(0.04)
+
+    def actions():
+        return [json.loads(row)[0] for row in (root / "actions.jsonl").read_text().splitlines()]
+
+    start = len(actions())
+
+    async def playback(*sequence):
+        async with asyncio.timeout(5):
+            while len(actions()) - start < len(sequence):
+                await asyncio.sleep(0.04)
+        assert actions()[start:] == list(sequence)
+
+    async def call_finished():
+        async with asyncio.timeout(5):
+            while True:
+                devices = (await client.call("state"))["devices"]
+                device = next(d for d in devices if d["id"] == peer.device_id)
+                if not device["state"].get("telephony", {}).get("call"):
+                    return
+                await asyncio.sleep(0.04)
+
+    peer.send("kdeconnect.mpris.request", {"player": player, "action": "Play"})
+    await playback("Play")
+    event("ringing")
+    await asyncio.sleep(0.3)
+    await playback("Play")
+    await muted(False)
+    event("talking")
+    await playback("Play", "Pause")
+    await muted(True)
+    event("ringing", isCancel=True)
+    await asyncio.sleep(0.3)
+    await playback("Play", "Pause")
+    await muted(True)
+    event("talking", isCancel=True)
+    await playback("Play", "Pause", "Play")
+    await muted(False)
+
+    await features(actionResume=False, actionMute=False)
+    event("talking")
+    await playback("Play", "Pause", "Play", "Pause")
+    event("talking", isCancel=True)
+    await call_finished()
+    await asyncio.sleep(0.3)
+    await playback("Play", "Pause", "Play", "Pause")
+    await features(actionResume=True, actionMute=True)
+    print(
+        "PASS saved call audio settings, pause and mute only while talking, resume and no-resume behavior", flush=True
+    )
+
+
+async def check_volume(client, peer, certificate, desktop_id, tcp, wait_for_device):
+    info = "kdeconnect.systemvolume"
+    request = "kdeconnect.systemvolume.request"
+
+    async def incoming(kind, match):
+        return (await asyncio.to_thread(peer.wait_for, kind, match, 5))["body"]
+
+    assert await incoming(request, lambda body: body.get("requestSinks"))
+    local = await incoming(
+        info, lambda body: any(sink["name"] == "main" and sink["enabled"] for sink in body.get("sinkList", []))
+    )
+    assert local["sinkList"][0]["volume"] == 32768
+    assert [sink["muted"] for sink in local["sinkList"]] == [False, True]
+    peer.send(request, {"name": "main", "volume": 50000, "muted": True})
+    assert await incoming(
+        info, lambda body: body.get("name") == "main" and body.get("volume") == 50000 and body.get("muted")
+    )
+    peer.send(request, {"name": "secondary", "enabled": True})
+    assert await incoming(info, lambda body: body.get("name") == "secondary" and body.get("enabled"))
+    assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="systemvolume", enabled=False)
+    audio = Path(os.environ["CC_TEST_AUDIO"])
+    before = audio.read_bytes()
+    peer.send(request, {"name": "main", "volume": 1})
+    with phone(certificate) as unknown:
+        await asyncio.to_thread(unknown.connect_direct, tcp, desktop_id)
+        unknown.send(request, {"name": "main", "volume": 2})
+        try:
+            await asyncio.to_thread(unknown.wait_for, info, timeout=0.5)
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError("unpaired peer received audio output state")
+    assert audio.read_bytes() == before
+    assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="systemvolume", enabled=True)
+
+    remote = {"name": "phone-output", "volume": 25, "maxVolume": 100, "description": "Device speaker", "enabled": True}
+    peer.send(info, {"sinkList": [remote]})
+    await wait_for_device(peer.device_id, lambda d: d and d["state"].get("remotesystemvolume", {}).get("sinks"))
+    peer.send(info, {"name": "phone-output", "volume": 39, "muted": True})
+    await wait_for_device(
+        peer.device_id,
+        lambda d: d
+        and any(
+            sink["volume"] == 39 and sink["muted"] for sink in d["state"].get("remotesystemvolume", {}).get("sinks", [])
+        ),
+    )
+    for action, args in (("set_volume", {"volume": 50}), ("set_muted", {"muted": False})):
+        fields = {"name": remote["name"], **args}
+        assert await client.call(
+            "device.call", device=peer.device_id, plugin="remotesystemvolume", action=action, args=fields
+        )
+        assert await incoming(request, lambda body, expected=fields: body == expected)
+    print("PASS system volume in both directions, sink updates, default output and unauthorized requests", flush=True)
 
 
 def seed_messages(peer):
@@ -1189,6 +1342,7 @@ def run_tray_watcher(record: Path):
     Gio.bus_own_name_on_connection(conn, namespace, Gio.BusNameOwnerFlags.NONE, None, None)
     mock_bluez_audio(conn, Gio, GLib)
     mock_notification_server(conn, Gio, GLib, record.parent / "notifications")
+    mock_screensaver(conn, Gio, GLib, record.parent / "inhibitor")
     GLib.MainLoop().run()
 
 
@@ -1289,6 +1443,99 @@ def mock_notification_server(conn, Gio, GLib, path: Path):
     Gio.bus_own_name_on_connection(conn, service, Gio.BusNameOwnerFlags.NONE, None, None)
 
 
+def mock_screensaver(conn, Gio, GLib, path):
+    service = "org.freedesktop.ScreenSaver"
+    xml = (
+        f'<node><interface name="{service}"><method name="Inhibit">'
+        '<arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="u" direction="out"/></method>'
+        '<method name="UnInhibit"><arg type="u" direction="in"/></method></interface></node>'
+    )
+    interface = Gio.DBusNodeInfo.new_for_xml(xml)
+    sender_id = None
+    acquisitions = 0
+
+    def call(_connection, sender, _path, _iface, method, parameters, invocation):
+        nonlocal sender_id, acquisitions
+        if method == "Inhibit":
+            assert parameters.unpack() == ("Caelestia Connect", "Device connected")
+            assert sender_id is None
+            sender_id = sender
+            acquisitions += 1
+            value = GLib.Variant("(u)", (acquisitions,))
+        else:
+            assert sender_id == sender and parameters.unpack() == (acquisitions,)
+            sender_id = None
+            value = None
+        update = path.with_suffix(".tmp")
+        update.write_text(json.dumps({"active": sender_id is not None, "acquisitions": acquisitions}))
+        update.replace(path)
+        invocation.return_value(value)
+
+    conn.register_object("/org/freedesktop/ScreenSaver", interface.interfaces[0], call, None, None)
+    Gio.bus_own_name_on_connection(conn, service, Gio.BusNameOwnerFlags.NONE, None, None)
+
+
+def setup_pactl(directory, audio):
+    audio.write_text(
+        json.dumps(
+            {
+                "default": "main",
+                "sinks": [
+                    {
+                        "name": name,
+                        "description": name.title(),
+                        "volume": {"front-left": {"value": 32768}},
+                        "mute": muted,
+                    }
+                    for name, muted in (("main", False), ("secondary", True))
+                ],
+            }
+        )
+    )
+    pactl = directory / "pactl"
+    pactl.write_text(
+        f"#!{sys.executable}\n"
+        """import json
+import os
+import sys
+import time
+from pathlib import Path
+
+path = Path(os.environ["CC_TEST_AUDIO"])
+args = sys.argv[1:]
+if args == ["subscribe"]:
+    previous = path.stat().st_mtime_ns
+    while True:
+        current = path.stat().st_mtime_ns
+        if current != previous:
+            print("Event 'change' on sink #0", flush=True)
+            previous = current
+        time.sleep(0.02)
+data = json.loads(path.read_text())
+if args == ["-f", "json", "list", "sinks"]:
+    print(json.dumps(data["sinks"]))
+elif args == ["get-default-sink"]:
+    print(data["default"])
+else:
+    command, name, *values = args
+    sink = next(sink for sink in data["sinks"] if sink["name"] == name)
+    if command == "set-sink-volume":
+        sink["volume"]["front-left"]["value"] = int(values[0])
+    elif command == "set-sink-mute":
+        sink["mute"] = values[0] == "1"
+    elif command == "set-default-sink":
+        data["default"] = name
+    else:
+        raise SystemExit(2)
+    temp = path.with_suffix(f".{os.getpid()}.tmp")
+    temp.write_text(json.dumps(data))
+    temp.replace(path)
+"""
+    )
+    pactl.chmod(0o700)
+    os.environ["CC_TEST_AUDIO"] = str(audio)
+
+
 def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
     os.environ.update(
         XDG_CONFIG_HOME=str(root / "config"),
@@ -1308,21 +1555,28 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
         '#!/bin/sh\ncase "$3" in\n-o) cat "$CC_TEST_CLIPBOARD";;\n-i) cat >"$CC_TEST_CLIPBOARD";;\n*) exit 1;;\nesac\n'
     )
     xclip.chmod(0o700)
+    qs = clipboard_tools / "qs"
+    qs.write_text("#!/bin/sh\nexit 1\n")
+    qs.chmod(0o700)
     os.environ.pop("WAYLAND_DISPLAY", None)
     os.environ.setdefault("DISPLAY", ":99")
     os.environ["PATH"] = str(clipboard_tools) + os.pathsep + os.environ["PATH"]
     os.environ["CC_TEST_CLIPBOARD"] = str(root / "clipboard.txt")
+    setup_pactl(clipboard_tools, root / "audio.json")
     from caelestia_connect.config import CONFIG_DIR, IPC_SOCKET
     from caelestia_connect.cli import Client
 
     me, certificate, peer = trust_with_python(IPC_SOCKET, CONFIG_DIR)
     try:
         assert not IPC_SOCKET.exists()
+        peer.incoming_capabilities.append("kdeconnect.systemvolume.request")
+        peer.outgoing_capabilities.append("kdeconnect.systemvolume")
         seed_messages(peer)
         device_config = CONFIG_DIR / "devices" / peer.device_id / "config.json"
         device_config.parent.mkdir(parents=True, exist_ok=True)
         device_settings = json.loads(device_config.read_text()) if device_config.exists() else {}
         device_settings.setdefault("pluginSettings", {})["phoneaudio"] = {"address": TEST_AUDIO_ADDRESS}
+        device_settings["pluginSettings"]["pausemusic"] = {"conditionTalking": True, "actionMute": True}
         device_config.write_text(json.dumps(device_settings))
         saved = files_at(CONFIG_DIR)
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -1372,8 +1626,11 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
             previous.setdefault("plugins", {})["ping"] = True
             previous["plugins"]["mprisremote"] = True
             previous["plugins"]["mpriscontrol"] = True
+            previous["plugins"]["systemvolume"] = True
+            previous["plugins"]["screensaver_inhibit"] = False
             previous.setdefault("pluginSettings", {})["mprisremote"] = {"hideIdle": False, "exportMpris": False}
             previous["pluginSettings"]["notifications"] = {"showPopups": False}
+            previous["pluginSettings"]["pausemusic"]["actionResume"] = True
             assert json.loads(after.pop(peer_config)) == previous
             assert saved == after
             disconnect(newcomer)
@@ -1442,7 +1699,7 @@ def run_gtk(device_id: str, action: str) -> int:
     gi.require_version("Adw", "1")
     gi.require_version("Gtk", "4.0")
     from gi.events import GLibEventLoopPolicy
-    from gi.repository import GLib, Gtk
+    from gi.repository import Adw, GLib, Gtk
 
     from caelestia_connect.ui.app import ConnectApp
 
@@ -1450,6 +1707,14 @@ def run_gtk(device_id: str, action: str) -> int:
     app = ConnectApp()
     clicked = False
     deadline = time.monotonic() + 5
+
+    def row_titles(widget):
+        if isinstance(widget, Adw.ActionRow):
+            yield widget.get_title()
+        child = widget.get_first_child()
+        while child:
+            yield from row_titles(child)
+            child = child.get_next_sibling()
 
     def activate_action():
         nonlocal clicked
@@ -1497,6 +1762,18 @@ def run_gtk(device_id: str, action: str) -> int:
                     GLib.timeout_add(100, app.quit)
                     return GLib.SOURCE_REMOVE
                 button = None
+            elif action == "audio-settings":
+                if page.device.get("id") == device_id and page.settings.get_mapped():
+                    assert {
+                        "System volume",
+                        "Remote system volume",
+                        "Pause media during calls",
+                        "Prevent screensaver",
+                    } <= set(row_titles(page.settings))
+                    clicked = True
+                    GLib.timeout_add(100, app.quit)
+                    return GLib.SOURCE_REMOVE
+                button = None
             elif action in {"ping", "text", "preferences"}:
                 button = page.overview.action_buttons.get("ping" if action == "ping" else "send-text")
             else:
@@ -1530,6 +1807,8 @@ def run_gtk(device_id: str, action: str) -> int:
         args.extend(["--page", "messages"])
     elif action == "notifications":
         args.extend(["--page", "notifications"])
+    elif action == "audio-settings":
+        args.extend(["--page", "settings"])
     result = app.run(args)
     return result or int(not clicked)
 
@@ -1541,7 +1820,18 @@ def main() -> int:
     parser.add_argument("--gtk-device", help=argparse.SUPPRESS)
     parser.add_argument(
         "--gtk-action",
-        choices=("ping", "pair", "accept", "text", "preferences", "media", "messages", "notifications", "call"),
+        choices=(
+            "ping",
+            "pair",
+            "accept",
+            "text",
+            "preferences",
+            "media",
+            "messages",
+            "notifications",
+            "call",
+            "audio-settings",
+        ),
         default="ping",
         help=argparse.SUPPRESS,
     )
