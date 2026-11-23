@@ -185,24 +185,17 @@ class FakeAndroid:
                 continue
         srv.listen(1)
         srv.settimeout(timeout)
-        u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        u.bind((self.host_ip, 0))
-        u.sendto(
-            packet(
-                "kdeconnect.identity",
-                {
-                    "deviceId": self.device_id,
-                    "deviceName": self.name,
-                    "protocolVersion": 8,
-                    "tcpPort": port,
-                    "deviceType": "phone",
-                },
-            ),
-            (self.host_ip, discovery_port),
-        )
-        u.close()
+        self.announce(port, discovery_port)
         conn, _addr = srv.accept()
         srv.close()
+        self.accept_connection(conn, timeout)
+
+    def announce(self, port: int, discovery_port: int, *, source: str | None = None) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as link:
+            link.bind((source or self.host_ip, 0))
+            link.sendto(packet("kdeconnect.identity", self.identity(tcpPort=port)), (self.host_ip, discovery_port))
+
+    def accept_connection(self, conn: socket.socket, timeout: float = 10) -> None:
         conn.settimeout(timeout)
         ident = json.loads(read_line(conn))
         assert ident["type"] == "kdeconnect.identity", ident
@@ -211,15 +204,25 @@ class FakeAndroid:
         self.tls = self.client_ctx().wrap_socket(conn, server_side=False)
         self._secure_identity()
 
-    def connect_direct(self, port: int, target_id: str, timeout: float = 10) -> None:
+    def connect_direct(
+        self,
+        port: int,
+        target_id: str,
+        timeout: float = 10,
+        *,
+        source: str | None = None,
+        advertised_port: int | None = None,
+    ) -> None:
         """We received the desktop's broadcast and connect to its TCP port (we are the TLS server)."""
-        conn = socket.create_connection((self.host_ip, port), timeout=timeout)
+        conn = socket.create_connection(
+            (self.host_ip, port), timeout=timeout, source_address=(source, 0) if source else None
+        )
         conn.sendall(packet("kdeconnect.identity", self.identity(targetDeviceId=target_id, targetProtocolVersion="8")))
         self.tls = self.server_ctx().wrap_socket(conn, server_side=True)
-        self._secure_identity()
+        self._secure_identity(**({"tcpPort": advertised_port} if advertised_port else {}))
 
-    def _secure_identity(self) -> None:
-        self.tls.sendall(packet("kdeconnect.identity", self.identity()))
+    def _secure_identity(self, **details) -> None:
+        self.tls.sendall(packet("kdeconnect.identity", self.identity(**details)))
         self.desktop_identity = json.loads(read_line(self.tls))
         assert self.desktop_identity["type"] == "kdeconnect.identity"
         self.tls.settimeout(None)

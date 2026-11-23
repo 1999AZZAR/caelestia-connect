@@ -4,6 +4,8 @@ The Rust daemon runs in the background and provides the desktop tray. The existi
 
 Rust creates a private desktop identity on first run, or reuses `certificate.pem` and `privateKey.pem` from Python. Both daemons read `trusted_devices.json`. Rust checks each paired phone against its saved certificate and atomically saves confirmed pairings and unpairing. Existing settings and device preferences are preserved. Run only one daemon against a profile at a time.
 
+After a LAN link drops, Rust retries the last authenticated address and TCP port without waiting for a new broadcast. Retries back off to one minute when a device stays offline. Recent discovery addresses are also tried once the active link drops. A paired device can reconnect from a new address while an old connection is still open. Rust announces itself over UDP at startup, when a local IPv4 address appears, and on manual discovery or a device name change.
+
 ## Build and verify
 
 From the repository root:
@@ -44,7 +46,9 @@ The Notifications page shows phone notifications and supports actions, replies, 
 
 **Run commands** keeps the predefined commands under **Settings → Features**. Paired devices trigger these commands by ID and can receive output and exit status. The daemon runs up to four commands at a time and stops each after two minutes. **Remote commands** shows commands offered by the peer on the device overview.
 
-The Python daemon still provides Bluetooth data transport, automatic and file clipboard sync, sending desktop notifications to the phone, call photos and local caller lookup, SFTP browsing, remote input and presentation controls, device locking and desktop ringing, screen mirroring, phone camera and webcam, and virtual monitors.
+Rust starts scrcpy for **Mirror screen** and **Phone camera** in the existing GTK app. Pair the phone in Caelestia Connect and authorize USB or wireless debugging. Screen power controls keep the mirroring session open, including when scrcpy creates a virtual display. The camera preview follows phone rotation and uses the saved front or rear camera setting. These controls also work over USB when the paired phone is offline in Caelestia Connect.
+
+The Python daemon still provides Bluetooth data transport, automatic and file clipboard sync, sending desktop notifications to the phone, call photos and local caller lookup, SFTP browsing, remote input and presentation controls, device locking and desktop ringing, the system-wide virtual webcam, and virtual monitors.
 
 ## Install the Rust user service
 

@@ -79,6 +79,7 @@ pub struct Trusted {
     pub notification_copy_codes: bool,
     pub pause_music: crate::state::telephony::PauseSettings,
     pub local_commands: crate::commands::Definitions,
+    pub android: crate::android::Settings,
 }
 
 impl Trusted {
@@ -522,6 +523,9 @@ impl TrustStore {
             read_json(&self.directory.join("devices").join(id).join("config.json"))?;
         Ok(Trusted {
             record,
+            android: crate::android::Settings::read(
+                device.plugin_settings.get(crate::android::PLUGIN),
+            ),
             local_commands: crate::commands::load(
                 device
                     .plugin_settings
@@ -600,6 +604,27 @@ impl TrustStore {
         self.entries.iter()
     }
 
+    pub fn remember_endpoint(&mut self, id: &str, address: Ipv4Addr, port: u16) -> Result<()> {
+        let entry = self.entries.get(id).context("device is not paired")?;
+        let address_text = address.to_string();
+        if entry.record["lastAddress"].as_str() == Some(&address_text)
+            && entry.record["lastPort"].as_u64() == Some(port.into())
+        {
+            return Ok(());
+        }
+        let mut record = entry.record.clone();
+        record["lastAddress"] = json!(address_text);
+        record["lastPort"] = json!(port);
+        let saved = self.save(id, Some(&record));
+        let entry = self.entries.get_mut(id).expect("paired endpoint");
+        entry.address = Some(address);
+        entry.port = port;
+        if saved.is_ok() {
+            entry.record = record;
+        }
+        saved
+    }
+
     pub fn plugin_setting(
         &mut self,
         id: &str,
@@ -641,6 +666,7 @@ impl TrustStore {
             (crate::commands::LOCAL, "commands") => {
                 entry.local_commands = crate::commands::load(Some(&value))
             }
+            (crate::android::PLUGIN, key) => entry.android.set(key, value),
             _ => unreachable!("unsupported feature setting"),
         }
         Ok(())

@@ -8,7 +8,7 @@ pub mod telephony;
 pub use pairing::PairCommand;
 
 use crate::{
-    audio as volume,
+    android, audio as volume,
     clipboard::{self, TEXT},
     commands as command,
     config::{Config, TrustStore, Trusted, validate_incoming_path},
@@ -161,6 +161,7 @@ pub struct State {
     popups: mpsc::Sender<crate::notifications::Popup>,
     audio: mpsc::Sender<volume::Request>,
     pub command_jobs: command::Jobs,
+    pub android: android::Manager,
 }
 
 impl State {
@@ -193,6 +194,7 @@ impl State {
             popups: workers.popups,
             audio: workers.audio,
             command_jobs: Default::default(),
+            android: Default::default(),
         }
     }
 
@@ -212,14 +214,37 @@ impl State {
         })
     }
 
-    fn changed(&self) {
+    pub(crate) fn changed(&self) {
         self.revision
             .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
 
+    pub fn android_device(&self, id: &str) -> Result<android::Device> {
+        let links = self.links.lock().unwrap();
+        let trusted = links
+            .trust
+            .get(id)
+            .filter(|trusted| trusted.enabled(android::PLUGIN) && !links.blocked.contains(id))
+            .context("Screen mirroring is unavailable for this device.")?;
+        let peer = links.active.get(id).map(|link| &link.peer);
+        let kind = peer.map_or(trusted.device_type.as_str(), |peer| {
+            peer.device_type.as_str()
+        });
+        ensure!(
+            android::supports(kind),
+            "This device does not offer Android mirroring."
+        );
+        Ok(android::Device {
+            name: peer.map_or(&trusted.name, |peer| &peer.name).clone(),
+            address: peer.map(|peer| peer.address).or(trusted.address),
+            options: trusted.android.clone(),
+            phoneaudio: trusted.enabled(phone_audio::PLUGIN),
+        })
+    }
+
     pub fn register(
         &self,
-        peer: Peer,
+        mut peer: Peer,
         dialed: bool,
         outbound: mpsc::Sender<Transmission>,
     ) -> Result<u64> {
@@ -228,23 +253,33 @@ impl State {
             !links.blocked.contains(&peer.id),
             "could not persist withdrawn pairing"
         );
-        if let Some(trusted) = links.trust.get(&peer.id) {
+        let trusted = links.trust.get(&peer.id);
+        let paired = trusted.is_some();
+        if let Some(trusted) = trusted {
             ensure!(
                 peer.version >= trusted.version
                     && peer.certificate.to_der()? == trusted.certificate,
                 "peer no longer matches its saved identity",
             );
         }
+        if !wire::PORTS.contains(&peer.port) {
+            peer.port = trusted.map_or(wire::DISCOVERY_PORT, |entry| entry.port);
+        }
         let preferred = dialed == (self.config.id < peer.id);
-        if let Some(old) = links.active.get(&peer.id) {
+        let replacing = if let Some(old) = links.active.get(&peer.id) {
             ensure!(
                 old.peer.fingerprint == peer.fingerprint,
                 "device identity changed"
             );
-            ensure!(preferred && !old.preferred, "device already connected");
+            let address_changed = paired && old.peer.address != peer.address;
+            ensure!(
+                address_changed || preferred && !old.preferred,
+                "device already connected"
+            );
+            true
         } else {
             ensure!(links.active.len() < MAX_LINKS, "too many connected devices");
-            if links.trust.get(&peer.id).is_none() {
+            if !paired {
                 let unpaired = links
                     .active
                     .keys()
@@ -252,10 +287,17 @@ impl State {
                     .count();
                 ensure!(unpaired < MAX_UNPAIRED, "too many unpaired devices");
             }
-        }
+            false
+        };
         links.next_serial += 1;
         let serial = links.next_serial;
-        if links.trust.get(&peer.id).is_some() {
+        if paired {
+            if let Err(error) = links
+                .trust
+                .remember_endpoint(&peer.id, peer.address, peer.port)
+            {
+                eprintln!("Could not save the paired LAN endpoint: {error:#}");
+            }
             links
                 .last_seen
                 .insert(peer.id.clone(), wire::timestamp_ms() / 1000);
@@ -280,6 +322,9 @@ impl State {
         );
         links.start_media(&id);
         drop(links);
+        if replacing {
+            self.transfers.cancel_device(&id);
+        }
         self.start_messaging(&id);
         self.start_notifications(&id);
         self.request_remote_sinks(&id);
@@ -288,7 +333,7 @@ impl State {
         Ok(serial)
     }
 
-    pub fn disconnect(&self, id: &str, serial: u64) {
+    pub fn disconnect(&self, id: &str, serial: u64) -> bool {
         let mut links = self.links.lock().unwrap();
         if links
             .active
@@ -296,7 +341,8 @@ impl State {
             .is_some_and(|link| link.serial == serial)
         {
             links.active.remove(id);
-            if links.trust.get(id).is_some() {
+            let paired = links.trust.get(id).is_some();
+            if paired {
                 links
                     .last_seen
                     .insert(id.to_owned(), wire::timestamp_ms() / 1000);
@@ -304,12 +350,19 @@ impl State {
             drop(links);
             self.transfers.cancel_device(id);
             self.changed();
+            return paired;
         }
+        false
     }
 
     pub fn can_dial(&self, id: &str) -> bool {
         let links = self.links.lock().unwrap();
         !links.blocked.contains(id) && !links.active.contains_key(id)
+    }
+
+    pub fn has_pairing(&self, id: &str) -> bool {
+        let links = self.links.lock().unwrap();
+        !links.blocked.contains(id) && links.trust.get(id).is_some()
     }
 
     pub fn certificate_pin(&self, id: &str, version: u32) -> Result<Option<Vec<u8>>> {
@@ -445,6 +498,7 @@ impl State {
         value: Value,
     ) -> Result<()> {
         match (plugin, key) {
+            (android::PLUGIN, key) => android::validate(key, &value)?,
             ("share", "incomingPath") => {
                 validate_incoming_path(value.as_str().context("expected a directory path")?)?
             }
@@ -488,6 +542,7 @@ impl State {
                     | volume::REMOTE
                     | telephony::PAUSE
                     | crate::idle::PLUGIN
+                    | android::PLUGIN
                     | command::LOCAL
                     | command::REMOTE
             ),
@@ -607,6 +662,14 @@ impl State {
             let mut plugins = Vec::new();
             let mut supported = Vec::new();
             let mut plugin_state = json!({});
+            if let Some(trusted) = trusted.filter(|_| android::supports(device_type)) {
+                let enabled = trusted.enabled(android::PLUGIN);
+                supported.push(android::PLUGIN);
+                plugins.push(trusted.android.plugin(enabled));
+                if enabled {
+                    plugin_state[android::PLUGIN] = self.android.snapshot(id);
+                }
+            }
             if let (Some(trusted), Some(peer)) = (trusted, peer) {
                 if peer.supports_commands(command::LOCAL) {
                     let enabled = trusted.enabled(command::LOCAL);

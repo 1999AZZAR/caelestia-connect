@@ -105,12 +105,18 @@ class Overview(Gtk.ScrolledWindow):
         return group, rows
 
     def _act(self, plugin: str, action: str, toast: str | None = None, **args):
+        def report(result):
+            if isinstance(result, dict) and result.get("error"):
+                self.app.toast(result["error"])
+            elif toast:
+                self.app.toast(toast)
+
         def run():
             self.app.plugin(
                 self.device["id"],
                 plugin,
                 action,
-                callback=(lambda _r: self.app.toast(toast)) if toast else None,
+                callback=report if toast or plugin == "android" else None,
                 **args,
             )
 
@@ -276,10 +282,17 @@ class Overview(Gtk.ScrolledWindow):
                 previous = button
         reachable = self.device["reachable"]
         self.action_columns.set_visible(bool(expected))
-        self.action_columns.set_sensitive(reachable)
-        self.action_hint.set_label(
-            _("Reconnect this device to use its controls.") if not reachable else _("No quick actions available.")
-        )
+        for action_id, button in self.action_buttons.items():
+            button.set_sensitive(reachable or action_id in {"mirror", "screen-power", "camera"})
+        local_controls = bool(expected & {"mirror", "camera"})
+        hint = _("No quick actions available.")
+        if not reachable:
+            hint = (
+                _("Reconnect this device to use its network controls.")
+                if local_controls
+                else _("Reconnect this device to use its controls.")
+            )
+        self.action_hint.set_label(hint)
         self.action_unavailable.set_visible(not (reachable and expected))
         self.scan_button.set_visible(not reachable)
 

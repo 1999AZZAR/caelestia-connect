@@ -18,6 +18,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from android_tools import setup_android_tools
 from fake_android import FakeAndroid, packet, read_line
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -232,7 +233,7 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
             },
         )
         try:
-            assert await asyncio.wait_for(ui.wait(), 10) == 0
+            assert await asyncio.wait_for(ui.wait(), 15) == 0, f"GTK action failed: {action}"
         finally:
             if ui.returncode is None:
                 ui.terminate()
@@ -241,6 +242,16 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
     def key_for(phone_peer, timestamp):
         return verification_key(cert_from_pem(certificate), phone_peer.cert, timestamp)
 
+    async def check_discovery_quiet(listener):
+        with listener:
+            listener.setblocking(False)
+            try:
+                payload = await asyncio.wait_for(asyncio.get_running_loop().sock_recv(listener, 8192), 63)
+            except TimeoutError:
+                return
+        raise AssertionError(f"Unsolicited discovery announcement after manual refresh: {json.loads(payload)['type']}")
+
+    discovery_check = None
     try:
         await check_tray("Active", "No devices connected")
         before = await client.call("subscribe")
@@ -264,8 +275,7 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
             assert await client.call("settings.setName", name="Rust LAN test") == "Rust LAN test"
             renamed, _ = await asyncio.to_thread(listener.recvfrom, 8192)
             assert json.loads(renamed)["body"]["deviceName"] == "Rust LAN test"
-            assert await client.call("devices.remove", address="127.122.33.44")
-            assert "127.122.33.44" not in (await client.call("state"))["settings"]["customDevices"]
+            discovery_check = asyncio.create_task(check_discovery_quiet(listener.dup()))
         print("PASS discovery uses the standard port and advertises a saved name change", flush=True)
 
         with phone(certificate) as advertised:
@@ -284,6 +294,9 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
         assert not device(await client.call("state"), peer.device_id)["reachable"]
         print("PASS rejected a different certificate with the paired device ID", flush=True)
 
+        await check_android(
+            client, peer, wait_for_device, tray_record.parent / "android", gtk_action if check_gtk else None
+        )
         await asyncio.to_thread(peer.connect_by_broadcast, discovery_port=port)
         online = await wait_for_device(peer.device_id, lambda d: d and d["reachable"])
         assert online["paired"] and online["fingerprint"] == trusted["fingerprint"]
@@ -306,6 +319,7 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
             "remotesystemvolume",
             "runcommand",
             "remotecommands",
+            "android",
         }
         assert await send_ping(peer.device_id, "sent by Rust")
         await asyncio.to_thread(peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "sent by Rust")
@@ -409,6 +423,7 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
             peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "direct reconnect"
         )
         print("PASS direct reconnect and ping with reversed TLS roles", flush=True)
+        await check_connection_recovery(peer, me["id"], tcp, port, wait_for_device, send_ping)
 
         await asyncio.to_thread(newcomer.connect_direct, tcp, me["id"])
         unknown = await wait_for_device(newcomer.device_id, lambda d: d and d["reachable"])
@@ -477,9 +492,170 @@ async def check_rust(me, certificate, peer, newcomer, port, check_gtk, tray_reco
         await asyncio.to_thread(peer.wait_for, "kdeconnect.pair", lambda body: body.get("pair") is False)
         assert not device(await client.call("state"), peer.device_id)["paired"]
         print("PASS pairing expires and late acceptance cannot restore trust", flush=True)
+        await discovery_check
+        assert await client.call("devices.remove", address="127.122.33.44")
+        assert "127.122.33.44" not in (await client.call("state"))["settings"]["customDevices"]
+        print("PASS UDP discovery stays quiet after startup and manual announcements", flush=True)
         assert await client.call("device.setPluginEnabled", device=newcomer.device_id, plugin="share", enabled=False)
     finally:
+        if discovery_check is not None:
+            discovery_check.cancel()
+            await asyncio.gather(discovery_check, return_exceptions=True)
         client.close()
+
+
+async def check_connection_recovery(peer, desktop_id, desktop_port, discovery_port, wait_for_device, ping):
+    from caelestia_connect.config import CONFIG_DIR
+
+    next_address = "127.0.0.2"
+    trust = CONFIG_DIR / "trusted_devices.json"
+    with socket.socket() as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        for next_port in range(1750, 1765):
+            try:
+                listener.bind((next_address, next_port))
+                break
+            except OSError:
+                continue
+        else:
+            raise AssertionError("no free peer port for reconnection test")
+        listener.settimeout(8)
+        old = peer.tls
+        try:
+            await asyncio.to_thread(
+                peer.connect_direct, desktop_port, desktop_id, source=next_address, advertised_port=next_port
+            )
+            await wait_for_device(peer.device_id, lambda d: d and d["reachable"] and d["address"] == next_address)
+            assert await ping(peer.device_id, "address changed")
+            await asyncio.to_thread(
+                peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "address changed"
+            )
+        finally:
+            old.close()
+
+        record = json.loads(trust.read_text())[peer.device_id]
+        assert (record["lastAddress"], record["lastPort"]) == (next_address, next_port)
+        disconnect(peer)
+        await wait_for_device(peer.device_id, lambda d: d and not d["reachable"])
+        await asyncio.sleep(2.3)
+        listener.listen(2)
+        connection, source = await asyncio.to_thread(listener.accept)
+        assert source[0] == "127.0.0.1"
+        await asyncio.to_thread(peer.accept_connection, connection)
+        await wait_for_device(peer.device_id, lambda d: d and d["reachable"] and d["address"] == next_address)
+        assert await ping(peer.device_id, "automatic reconnect")
+        await asyncio.to_thread(
+            peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "automatic reconnect"
+        )
+    print("PASS authenticated address handoff, saved endpoint, and reconnect without a new phone broadcast", flush=True)
+
+    discovered_address = "127.0.0.3"
+    with socket.socket() as listener:
+        listener.bind((discovered_address, next_port))
+        listener.listen(1)
+        listener.settimeout(0.35)
+        peer.announce(next_port, discovery_port, source=discovered_address)
+        try:
+            unexpected = await asyncio.to_thread(listener.accept)
+        except TimeoutError:
+            pass
+        else:
+            unexpected[0].close()
+            raise AssertionError("a secondary address advertisement interrupted a healthy link")
+        assert await ping(peer.device_id, "existing link preserved")
+        await asyncio.to_thread(
+            peer.wait_for, "kdeconnect.ping", lambda body: body.get("message") == "existing link preserved"
+        )
+        listener.settimeout(8)
+        disconnect(peer)
+        connection, _ = await asyncio.to_thread(listener.accept)
+        await asyncio.to_thread(peer.accept_connection, connection)
+        await wait_for_device(peer.device_id, lambda d: d and d["reachable"] and d["address"] == discovered_address)
+        record = json.loads(trust.read_text())[peer.device_id]
+        assert (record["lastAddress"], record["lastPort"]) == (discovered_address, next_port)
+    print("PASS discovery keeps an active link and can recover through a previously seen address", flush=True)
+
+
+async def check_android(client, peer, wait_for_device, root, gtk_action):
+    state_file = root / "adb.json"
+    log_file = root / "calls"
+
+    def configure(**changes):
+        state = json.loads(state_file.read_text())
+        target = state_file.with_suffix(".tmp")
+        target.write_text(json.dumps(state | changes))
+        target.replace(state_file)
+
+    def scrcpy():
+        return [line for line in log_file.read_text().splitlines() if line.startswith("scrcpy ")]
+
+    async def action(verb, **args):
+        return await client.call("device.call", device=peer.device_id, plugin="android", action=verb, args=args)
+
+    async def shown(**values):
+        await wait_for_device(
+            peer.device_id,
+            lambda d: d and all(d["state"].get("android", {}).get(key) == value for key, value in values.items()),
+        )
+
+    configure(devices={"FAKE-USB": "unauthorized"})
+    assert await action("scan") == {"serial": "", "devices": [], "unauthorized": True}
+    configure(devices={"FAKE-USB": "device"}, names={"FAKE-USB": peer.name})
+    assert await action("scan") == {"serial": "FAKE-USB", "devices": ["FAKE-USB"], "unauthorized": False}
+    assert "error" in await action("mirror", serial="unknown")
+    phone = await wait_for_device(peer.device_id, lambda d: d is not None and not d["reachable"])
+    settings = next(p for p in phone["plugins"] if p["id"] == "android")
+    assert settings["values"]["video_bit_rate"] == "16M"
+    fail = root / "scrcpy.fail"
+    fail.touch()
+    assert "error" in await action("mirror", serial="FAKE-USB")
+    await shown(mirroring=False)
+    fail.unlink()
+    if gtk_action:
+        await gtk_action(peer.device_id, "mirror")
+    else:
+        assert await action("mirror", serial="FAKE-USB") == {}
+    await shown(mirroring=True)
+    screen = scrcpy()[-1]
+    assert "--serial FAKE-USB" in screen and "--video-bit-rate=16M" in screen, screen
+    assert "--new-display=1920x1080" in screen and "--max-size=1440" in screen, screen
+    assert "--no-audio" in screen and "--window-x 80" in screen, screen
+    assert await action("toggle_screen") == {"screenOn": False}
+    await shown(mirroring=True, screenOn=False)
+    assert await action("set_screen", on=True) == {"screenOn": True}
+    assert scrcpy()[-1] == screen
+    assert await action("set_screen", on=False) == {"screenOn": False}
+    await action("stop_mirror")
+    await shown(mirroring=False, screenOn=True)
+    assert json.loads(state_file.read_text())["screen_on"]
+    print("PASS Rust scrcpy screen settings, failed start, in-place power controls, and power restoration", flush=True)
+
+    configure(devices={}, mdns=["test _adb-tls-connect._tcp 127.0.0.1:43567"])
+    assert (await action("scan"))["serial"] == "127.0.0.1:43567"
+    if gtk_action:
+        await gtk_action(peer.device_id, "camera")
+    else:
+        assert await action("camera", facing="front") == {}
+    await shown(preview=True)
+    front = scrcpy()[-1]
+    assert "--video-source=camera --camera-facing=front" in front
+    assert "--display-orientation=270" in front
+    configure(rotation=1)
+    deadline = time.monotonic() + 10
+    while "--display-orientation=180" not in scrcpy()[-1]:
+        assert time.monotonic() < deadline, scrcpy()
+        await asyncio.sleep(0.1)
+    assert await action("camera", facing="back") == {}
+    rear = scrcpy()[-1]
+    assert "--camera-facing=back" in rear and "--display-orientation=180" in rear
+    assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="android", enabled=False)
+    deadline = time.monotonic() + 5
+    while Path(f"/proc/{rear.rsplit('pid=', 1)[1]}").exists():
+        assert time.monotonic() < deadline, "Camera kept running after its feature was disabled"
+        await asyncio.sleep(0.1)
+    assert await client.call("device.setPluginEnabled", device=peer.device_id, plugin="android", enabled=True)
+    await shown(preview=False)
+    print("PASS Rust wireless debugging, camera orientation, lens switching, and camera cleanup", flush=True)
 
 
 async def check_file_sharing(client, peer):
@@ -1662,6 +1838,10 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
     os.environ["PATH"] = str(clipboard_tools) + os.pathsep + os.environ["PATH"]
     os.environ["CC_TEST_CLIPBOARD"] = str(root / "clipboard.txt")
     setup_pactl(clipboard_tools, root / "audio.json")
+    android_tools = root / "android" / "bin"
+    setup_android_tools(android_tools)
+    (android_tools.parent / "adb.json").write_text('{"devices":{}}')
+    os.environ["PATH"] = str(android_tools) + os.pathsep + os.environ["PATH"]
     from caelestia_connect.config import CONFIG_DIR, IPC_SOCKET
     from caelestia_connect.cli import Client
 
@@ -1678,12 +1858,25 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
         device_settings = json.loads(device_config.read_text()) if device_config.exists() else {}
         device_settings.setdefault("pluginSettings", {})["phoneaudio"] = {"address": TEST_AUDIO_ADDRESS}
         device_settings["pluginSettings"]["pausemusic"] = {"conditionTalking": True, "actionMute": True}
+        device_settings["pluginSettings"]["android"] = {
+            "audio": False,
+            "video_bit_rate": "16M",
+            "max_size": 1440,
+            "new_display": "1920x1080",
+            "custom_args": '--window-x "80"',
+            "facing": "front",
+            "webcam": False,
+        }
         device_settings["pluginSettings"]["runcommand"] = {
             "commands": {
                 "fixture": {"name": "Existing command", "command": "printf 'saved\\n'; printf 'fixture error\\n' >&2"}
             }
         }
         device_config.write_text(json.dumps(device_settings))
+        trust_file = CONFIG_DIR / "trusted_devices.json"
+        trust = json.loads(trust_file.read_text())
+        trust[peer.device_id].update(lastAddress="127.0.0.1")
+        trust_file.write_text(json.dumps(trust))
         saved = files_at(CONFIG_DIR)
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind(("127.0.0.1", 0))
@@ -1735,9 +1928,11 @@ def run_isolated(binary: Path, root: Path, check_gtk: bool) -> None:
             previous["plugins"]["systemvolume"] = True
             previous["plugins"]["runcommand"] = True
             previous["plugins"]["screensaver_inhibit"] = False
+            previous["plugins"]["android"] = True
             previous.setdefault("pluginSettings", {})["mprisremote"] = {"hideIdle": False, "exportMpris": False}
             previous["pluginSettings"]["notifications"] = {"showPopups": False}
             previous["pluginSettings"]["pausemusic"]["actionResume"] = True
+            previous["pluginSettings"]["android"]["facing"] = "back"
             assert json.loads(after.pop(peer_config)) == previous
             assert saved == after
             disconnect(newcomer)
@@ -1813,7 +2008,9 @@ def run_gtk(device_id: str, action: str) -> int:
     asyncio.set_event_loop_policy(GLibEventLoopPolicy())
     app = ConnectApp()
     clicked = False
-    deadline = time.monotonic() + 5
+    android_requested = False
+    camera_confirmed = False
+    deadline = time.monotonic() + (10 if action in {"mirror", "camera"} else 5)
 
     def action_rows(widget):
         if isinstance(widget, Adw.ActionRow):
@@ -1824,7 +2021,7 @@ def run_gtk(device_id: str, action: str) -> int:
             child = child.get_next_sibling()
 
     def activate_action():
-        nonlocal clicked
+        nonlocal clicked, android_requested, camera_confirmed
         if app.window:
             page = app.window.device_page
             if action == "preferences" and page.device.get("id") == device_id:
@@ -1891,6 +2088,24 @@ def run_gtk(device_id: str, action: str) -> int:
                 group = page.overview.commands.get_last_child()
                 item = group.get_first_child() if isinstance(group, Gtk.FlowBox) else None
                 button = item.get_child() if item else None
+            elif action in {"mirror", "camera"}:
+                if page.device.get("id") == device_id:
+                    android = page.device.get("state", {}).get("android", {})
+                    if android.get("mirroring" if action == "mirror" else "preview"):
+                        clicked = True
+                        app.quit()
+                        return GLib.SOURCE_REMOVE
+                    button = page.overview.action_buttons.get(action)
+                    if not android_requested and button and button.get_mapped() and button.is_sensitive():
+                        button.emit("clicked")
+                        android_requested = True
+                    dialog = app.window.get_visible_dialog()
+                    if action == "camera" and isinstance(dialog, Adw.AlertDialog) and not camera_confirmed:
+                        assert dialog.get_heading() == "Phone camera"
+                        assert dialog.get_response_enabled("start")
+                        dialog.emit("response", "start")
+                        camera_confirmed = True
+                button = None
             elif action in {"ping", "text", "preferences"}:
                 button = page.overview.action_buttons.get("ping" if action == "ping" else "send-text")
             else:
@@ -1914,6 +2129,16 @@ def run_gtk(device_id: str, action: str) -> int:
                 GLib.timeout_add(500, app.quit)
                 return GLib.SOURCE_REMOVE
         if time.monotonic() >= deadline:
+            if action in {"mirror", "camera"} and app.window:
+                page = app.window.device_page
+                buttons = page.overview.action_buttons
+                print(
+                    f"GTK {action} timed out (clicked={android_requested}, "
+                    f"button={action in buttons}, selected={page.device.get('id') == device_id}, "
+                    f"android={page.device.get('state', {}).get('android')})",
+                    file=sys.stderr,
+                    flush=True,
+                )
             app.quit()
             return GLib.SOURCE_REMOVE
         return GLib.SOURCE_CONTINUE
@@ -1949,6 +2174,8 @@ def main() -> int:
             "call",
             "audio-settings",
             "commands",
+            "mirror",
+            "camera",
         ),
         default="ping",
         help=argparse.SUPPRESS,

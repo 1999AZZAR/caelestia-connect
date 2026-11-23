@@ -189,7 +189,7 @@ if command -v ufw >/dev/null && [ -r /etc/ufw/user.rules ] && ! grep -q 1714 /et
 fi
 if ((webcam)); then
     setup_webcam || true
-elif [ ! -e "$WEBCAM_MODPROBE" ]; then
+elif [[ "$backend" == python && ! -e "$WEBCAM_MODPROBE" ]]; then
     echo ":: To use the phone camera as a webcam, run: ./install.sh --webcam"
 fi
 

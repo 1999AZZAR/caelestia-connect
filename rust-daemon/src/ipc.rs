@@ -342,6 +342,9 @@ async fn dispatch(
                 (Some(crate::commands::REMOTE), Some(action)) => {
                     return Ok(json!(state.remote_command_action(device, action, args)?));
                 }
+                (Some(crate::android::PLUGIN), Some(action)) => {
+                    return state.android.call(state, device, action, args).await;
+                }
                 (Some("findmyphone"), Some("ring")) => {
                     state
                         .send(device, wire::Packet::new(crate::desktop::RING, json!({})))

@@ -84,6 +84,7 @@ dependencies = [
  "percent-encoding",
  "serde",
  "serde_json",
+ "shlex",
  "socket2",
  "tempfile",
  "tokio",

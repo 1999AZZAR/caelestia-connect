@@ -1,0 +1,13 @@
+[
+  {"key": "webcam", "type": "bool", "label": "Use the camera as a webcam", "default": true},
+  {"key": "audio", "type": "bool", "label": "Forward audio while mirroring", "default": true},
+  {"key": "turn_screen_off", "type": "bool", "label": "Turn phone screen off while mirroring", "default": false},
+  {"key": "stay_awake", "type": "bool", "label": "Stay awake while mirroring", "default": true},
+  {"key": "max_size", "type": "choice", "label": "Mirror resolution", "default": 0, "choices": [[0, "Native resolution"], [1080, "1080p (max 1080)"], [1440, "1440p (max 1440)"], [1920, "1080p landscape (max 1920)"], [2560, "2K (max 2560)"]]},
+  {"key": "video_bit_rate", "type": "choice", "label": "Video bit rate", "default": "8M", "choices": [["4M", "4 Mbps (Low latency)"], ["8M", "8 Mbps (Default)"], ["12M", "12 Mbps (High quality)"], ["16M", "16 Mbps (Very high quality)"], ["24M", "24 Mbps (Ultra quality)"]]},
+  {"key": "max_fps", "type": "choice", "label": "Max frame rate", "default": 0, "choices": [[0, "Device default"], [30, "30 fps"], [55, "55 fps (Custom)"], [60, "60 fps"], [90, "90 fps"], [120, "120 fps"]]},
+  {"key": "new_display", "type": "str", "label": "Virtual display (e.g. 1920x1080)", "default": ""},
+  {"key": "custom_args", "type": "str", "label": "Custom scrcpy arguments", "default": ""},
+  {"key": "facing", "type": "choice", "label": "Camera", "default": "front", "choices": [["front", "Front camera"], ["back", "Rear camera"]]},
+  {"key": "rotation", "type": "choice", "label": "Extra rotation", "default": 0, "choices": [[0, "None"], [90, "90°"], [180, "180°"], [270, "270°"]]}
+]

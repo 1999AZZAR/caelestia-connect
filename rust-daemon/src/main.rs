@@ -1,3 +1,4 @@
+mod android;
 mod audio;
 mod clipboard;
 mod commands;
@@ -134,6 +135,14 @@ async fn main() -> Result<()> {
         args.bind
     );
     let (background_alive, audio_shutdown) = watch::channel(());
+    let android_shutdown = audio_shutdown.clone();
+    let android_state = state.clone();
+    let android_worker = tokio::spawn(async move {
+        android_state
+            .android
+            .run(&android_state, android_shutdown)
+            .await
+    });
     let idle_service = Arc::clone(&state);
     let idle_shutdown = audio_shutdown.clone();
     let idle_worker = tokio::spawn(async move { idle::run(&idle_service, idle_shutdown).await });
@@ -161,6 +170,6 @@ async fn main() -> Result<()> {
         _ = terminate.recv() => Ok(()),
     };
     drop(background_alive);
-    tokio::try_join!(audio_worker, idle_worker)?;
+    tokio::try_join!(audio_worker, idle_worker, android_worker)?;
     result
 }

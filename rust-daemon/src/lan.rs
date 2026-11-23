@@ -11,7 +11,7 @@ use openssl::{
 use serde_json::json;
 use socket2::{SockRef, TcpKeepalive};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     pin::Pin,
     sync::Arc,
@@ -19,14 +19,57 @@ use std::{
 };
 use tokio::{
     io::BufReader,
-    net::{TcpListener, TcpStream, UdpSocket},
+    net::{TcpListener, TcpSocket, TcpStream, UdpSocket},
     sync::{Semaphore, mpsc},
     task::JoinSet,
-    time::{MissedTickBehavior, interval, timeout},
+    time::{Instant, MissedTickBehavior, interval, sleep_until, timeout},
 };
 use tokio_openssl::SslStream;
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+const RETRY_INTERVAL: Duration = Duration::from_secs(2);
+const RETRY_LIMIT: Duration = Duration::from_secs(60);
+const DISCOVERY_HINT_LIFETIME: Duration = Duration::from_secs(120);
+const DISCOVERY_SETTLE: Duration = Duration::from_millis(1500);
+const MAX_ALTERNATE_ADDRESSES: usize = 4;
+
+type Target = (String, SocketAddrV4, u32);
+
+struct DiscoveryHint {
+    seen: Instant,
+    endpoints: Vec<(SocketAddrV4, u32)>,
+}
+
+fn remember_discovery(
+    state: &State,
+    hints: &mut BTreeMap<String, DiscoveryHint>,
+    discovered: &[Target],
+) {
+    let Some((id, _, _)) = discovered.first() else {
+        return;
+    };
+    if state.has_pairing(id) {
+        let endpoints = discovered
+            .iter()
+            .take(MAX_ALTERNATE_ADDRESSES - 1)
+            .map(|(_, address, version)| (*address, *version))
+            .collect();
+        hints.insert(
+            id.clone(),
+            DiscoveryHint {
+                seen: Instant::now(),
+                endpoints,
+            },
+        );
+    }
+}
+
+struct Retry {
+    address: SocketAddrV4,
+    next: Instant,
+    delay: Duration,
+}
 
 pub async fn listen(bind: Ipv4Addr) -> Result<TcpListener> {
     for port in wire::PORTS {
@@ -50,8 +93,11 @@ pub async fn run(
     let mut jobs = JoinSet::new();
     let mut dialing = BTreeSet::new();
     let (dial_finished, mut dial_completions) = mpsc::unbounded_channel();
-    let mut announcements = interval(Duration::from_secs(60));
-    announcements.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut announce_at = udp.as_ref().map(|_| Instant::now());
+    let mut reconnect = interval(RETRY_INTERVAL);
+    reconnect.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut retries = BTreeMap::<String, Retry>::new();
+    let mut hints = BTreeMap::<String, DiscoveryHint>::new();
     let mut buffer = [0_u8; IDENTITY_LIMIT + 1];
     let mut changes = state.subscribe();
     let mut advertised_name = state.config.name();
@@ -65,14 +111,45 @@ pub async fn run(
             }
         });
     loop {
-        let targets = tokio::select! {
+        let (targets, remembered) = tokio::select! {
             matches = async {
                 match &mdns {
                     Some(mdns) => mdns.next().await,
                     None => std::future::pending().await,
                 }
-            } => matches,
-            _ = announcements.tick() => refresh_targets(&state, udp.as_ref(), bind, None).await?,
+            } => {
+                remember_discovery(&state, &mut hints, &matches);
+                (matches, false)
+            }
+            _ = async {
+                match &mdns {
+                    Some(mdns) => mdns.new_address().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                announce_at = Some(Instant::now() + DISCOVERY_SETTLE);
+                retries.clear();
+                continue;
+            }
+            _ = async {
+                match announce_at {
+                    Some(due) => sleep_until(due).await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                announce_at = None;
+                announce(&state, udp.as_ref(), bind, None).await?;
+                continue;
+            }
+            _ = reconnect.tick(), if udp.is_some() => {
+                let mut targets = saved_targets(&state, bind);
+                hints.retain(|id, hint| hint.seen.elapsed() < DISCOVERY_HINT_LIFETIME && state.has_pairing(id));
+                for (id, hint) in hints.iter().filter(|(id, _)| state.can_dial(id)) {
+                    targets.extend(hint.endpoints.iter().map(|(address, version)| (id.clone(), *address, *version)));
+                }
+                retries.retain(|id, _| targets.iter().any(|(device, _, _)| device == id));
+                (targets, true)
+            }
             _ = changes.changed() => {
                 let name = state.config.name();
                 if name == advertised_name { continue; }
@@ -82,11 +159,15 @@ pub async fn run(
                         eprintln!("Could not update the mDNS announcement: {error}");
                     }
                 }
-                refresh_targets(&state, udp.as_ref(), bind, None).await?
+                announce(&state, udp.as_ref(), bind, None).await?;
+                announce_at = None;
+                continue;
             }
             signal = refresh.recv() => {
                 let Some(address) = signal else { return Ok(()); };
-                refresh_targets(&state, udp.as_ref(), bind, address).await?
+                announce(&state, udp.as_ref(), bind, address).await?;
+                announce_at = None;
+                if udp.is_some() { (saved_targets(&state, bind), false) } else { continue; }
             }
             result = async {
                 match &udp {
@@ -106,7 +187,9 @@ pub async fn run(
                 if !wire::PORTS.contains(&identity.tcp_port) || !identity.is_targeted_to(&state.config.id) {
                     continue;
                 }
-                vec![(identity.device_id, SocketAddrV4::new(*address.ip(), identity.tcp_port), identity.protocol_version)]
+                let targets = vec![(identity.device_id, SocketAddrV4::new(*address.ip(), identity.tcp_port), identity.protocol_version)];
+                remember_discovery(&state, &mut hints, &targets);
+                (targets, false)
             }
             result = listener.accept() => {
                 let (stream, address) = result.context("accept TCP connection")?;
@@ -117,13 +200,16 @@ pub async fn run(
                     let established = timeout(HANDSHAKE_TIMEOUT, incoming(&state, stream)).await;
                     drop(permit);
                     if let Ok(Ok((identity, stream))) = established {
-                        let _ = serve_link(&state, identity, stream, *address.ip(), 1716, false).await;
+                        let _ = serve_link(&state, identity, stream, *address.ip(), None).await;
                     }
                 });
                 continue;
             }
-            Some(id) = dial_completions.recv() => {
+            Some((id, connected)) = dial_completions.recv() => {
                 dialing.remove(&id);
+                if connected {
+                    retries.remove(&id);
+                }
                 continue;
             }
             Some(result) = jobs.join_next(), if !jobs.is_empty() => {
@@ -131,40 +217,93 @@ pub async fn run(
                 continue;
             }
         };
-        for (id, addr, version) in targets {
-            if id == state.config.id
-                || !state.can_dial(&id)
-                || dialing.contains(&id)
-                || state.certificate_pin(&id, version).is_err()
+        let mut candidates = BTreeMap::<String, Vec<_>>::new();
+        for (id, address, version) in targets {
+            if id != state.config.id
+                && !dialing.contains(&id)
+                && state.can_dial(&id)
+                && state.certificate_pin(&id, version).is_ok()
             {
+                let options = candidates.entry(id).or_default();
+                if options.len() < MAX_ALTERNATE_ADDRESSES && !options.contains(&(address, version))
+                {
+                    options.push((address, version));
+                }
+            }
+        }
+        for (id, options) in candidates {
+            let now = Instant::now();
+            let address = options[0].0;
+            let last_retry = retries.get(&id).filter(|retry| retry.address == address);
+            if remembered && last_retry.is_some_and(|retry| retry.next > now) {
                 continue;
             }
             let Ok(permit) = handshakes.clone().try_acquire_owned() else {
                 break;
             };
+            if remembered {
+                let delay =
+                    last_retry.map_or(RETRY_INTERVAL, |retry| (2 * retry.delay).min(RETRY_LIMIT));
+                retries.insert(
+                    id.clone(),
+                    Retry {
+                        address,
+                        next: now + delay,
+                        delay,
+                    },
+                );
+            }
             dialing.insert(id.clone());
             let state = state.clone();
             let dial_finished = dial_finished.clone();
             jobs.spawn(async move {
-                let established =
-                    timeout(HANDSHAKE_TIMEOUT, outgoing(&state, addr, &id, version)).await;
+                let established = timeout(HANDSHAKE_TIMEOUT, async {
+                    for (address, version) in options {
+                        if !state.can_dial(&id) {
+                            return None;
+                        }
+                        if let Ok((identity, stream)) =
+                            outgoing(&state, address, bind, &id, version).await
+                        {
+                            return Some((address, identity, stream));
+                        }
+                    }
+                    None
+                })
+                .await
+                .ok()
+                .flatten();
                 drop(permit);
-                let _ = dial_finished.send(id);
-                if let Ok(Ok((identity, stream))) = established {
-                    let _ =
-                        serve_link(&state, identity, stream, *addr.ip(), addr.port(), true).await;
+                let _ = dial_finished.send((id, established.is_some()));
+                if let Some((address, identity, stream)) = established {
+                    let _ = serve_link(
+                        &state,
+                        identity,
+                        stream,
+                        *address.ip(),
+                        Some(address.port()),
+                    )
+                    .await;
                 }
             });
         }
     }
 }
 
-async fn refresh_targets(
+fn saved_targets(state: &State, bind: Ipv4Addr) -> Vec<Target> {
+    state
+        .known_addresses()
+        .into_iter()
+        .filter(|(_, address, _)| !bind.is_loopback() || address.ip().is_loopback())
+        .collect()
+}
+
+async fn announce(
     state: &State,
     udp: Option<&UdpSocket>,
     bind: Ipv4Addr,
     address: Option<Ipv4Addr>,
-) -> Result<Vec<(String, SocketAddrV4, u32)>> {
+) -> Result<()> {
     if let Some(udp) = udp {
         let mut body = state.config.identity(false);
         body["tcpPort"] = json!(state.tcp_port);
@@ -179,13 +318,8 @@ async fn refresh_targets(
                 let _ = udp.send_to(&frame, (ip, wire::DISCOVERY_PORT)).await;
             }
         }
-        return Ok(state
-            .known_addresses()
-            .into_iter()
-            .filter(|(_, address, _)| !bind.is_loopback() || address.ip().is_loopback())
-            .collect());
     }
-    Ok(Vec::new())
+    Ok(())
 }
 
 type SecureReader = BufReader<SslStream<TcpStream>>;
@@ -209,10 +343,15 @@ async fn incoming(state: &State, mut stream: TcpStream) -> Result<(Identity, Sec
 async fn outgoing(
     state: &State,
     addr: SocketAddrV4,
+    bind: Ipv4Addr,
     id: &str,
     version: u32,
 ) -> Result<(Identity, SecureReader)> {
-    let mut stream = TcpStream::connect(addr).await?;
+    let socket = TcpSocket::new_v4()?;
+    if !bind.is_unspecified() {
+        socket.bind(SocketAddrV4::new(bind, 0).into())?;
+    }
+    let mut stream = timeout(CONNECT_TIMEOUT, socket.connect(addr.into())).await??;
     let mut body = state.config.identity(false);
     body["targetDeviceId"] = json!(id);
     body["targetProtocolVersion"] = json!(version);
@@ -238,11 +377,9 @@ async fn secure(
     let expected = state.certificate_pin(id, version)?;
     // KDE Connect reverses TCP and TLS roles on the control connection.
     let mut tls = authenticated_stream(&state.config.tls, stream, id, expected, dialed).await?;
-    wire::write_frame(
-        &mut tls,
-        &Packet::new(IDENTITY, state.config.identity(true)),
-    )
-    .await?;
+    let mut body = state.config.identity(true);
+    body["tcpPort"] = json!(state.tcp_port);
+    wire::write_frame(&mut tls, &Packet::new(IDENTITY, body)).await?;
     let mut reader = BufReader::new(tls);
     let frame = wire::read_frame(&mut reader, &mut Vec::new(), IDENTITY_LIMIT)
         .await?
@@ -304,8 +441,7 @@ async fn serve_link(
     identity: Identity,
     mut stream: SecureReader,
     address: Ipv4Addr,
-    port: u16,
-    dialed: bool,
+    dialed_port: Option<u16>,
 ) -> Result<()> {
     let cert = stream
         .get_ref()
@@ -328,23 +464,27 @@ async fn serve_link(
             certificate: cert,
             address,
             local_address: *local_address.ip(),
-            port,
+            port: dialed_port.unwrap_or(identity.tcp_port),
             incoming_capabilities: identity.incoming_capabilities,
             outgoing_capabilities: identity.outgoing_capabilities,
         },
-        dialed,
+        dialed_port.is_some(),
         outbound,
     )?;
     let mut buffer = Vec::new();
-    loop {
+    let online_since = Instant::now();
+    let reason = loop {
         tokio::select! {
             received = wire::read_frame(&mut stream, &mut buffer, state.network_frame_limit(&id, serial)) => {
-                let Ok(Some(frame)) = received else { break; };
+                let frame = match received {
+                    Ok(Some(frame)) => frame,
+                    Ok(None) => break "peer closed the connection".to_owned(),
+                    Err(error) => break format!("could not read from the peer: {error:#}"),
+                };
                 if let Ok(packet) = serde_json::from_slice::<Packet>(&frame) {
                     if packet.kind == PAIR {
                         if let Err(error) = state.peer_pair(&id, serial, &packet.body) {
-                            eprintln!("Pairing update for {id} failed: {error}");
-                            break;
+                            break format!("pairing update failed: {error:#}");
                         }
                     } else if packet.kind == SHARE {
                         crate::share::receive(state, &id, serial, packet);
@@ -372,7 +512,7 @@ async fn serve_link(
                 }
             }
             transmission = outgoing.recv() => {
-                let Some(transmission) = transmission else { break; };
+                let Some(transmission) = transmission else { break "link was replaced".to_owned(); };
                 if !state.can_transmit(&id, serial, &transmission.packet) {
                     if let Some(completed) = transmission.completed {
                         let _ = completed.send(Err(anyhow::anyhow!("device is unpaired or disconnected")));
@@ -381,14 +521,19 @@ async fn serve_link(
                 }
                 let result = timeout(Duration::from_secs(4), wire::write_frame(stream.get_mut(), &transmission.packet))
                     .await.context("timed out writing to device").and_then(|result| result);
-                let failed = result.is_err();
+                let failure = result.as_ref().err().map(|error| format!("could not write to the peer: {error:#}"));
                 if let Some(completed) = transmission.completed {
                     let _ = completed.send(result);
                 }
-                if failed { break; }
+                if let Some(failure) = failure { break failure; }
             }
         }
+    };
+    if state.disconnect(&id, serial) {
+        eprintln!(
+            "Paired LAN connection {serial} ended after {}s: {reason}",
+            online_since.elapsed().as_secs()
+        );
     }
-    state.disconnect(&id, serial);
     Ok(())
 }

@@ -24,6 +24,9 @@ def show(app, window, device: dict, camera: bool = False) -> None:
     def found(result) -> None:
         if not isinstance(result, dict):
             return
+        if result.get("error"):
+            report(result)
+            return
         serials = result.get("devices") or []
         if not serials:
             dialog = Adw.AlertDialog(heading=_("Phone camera") if camera else _("Mirror screen"))
@@ -64,13 +67,14 @@ def show(app, window, device: dict, camera: bool = False) -> None:
             group.add(facing)
         dialog.set_extra_child(group)
 
-        webcam = device["state"].get("android", {}).get("webcam", {})
+        webcam = device["state"].get("android", {}).get("webcam")
         if not camera:
             dialog.set_body(_("Choose the Android device to view and control in a separate window."))
-        elif webcam.get("setup"):
-            dialog.set_body(WEBCAM_SETUP.get(webcam["setup"], ""))
-        else:
-            dialog.set_body(_("Other apps can also use the camera as “Caelestia Phone Camera”."))
+        elif webcam is not None:
+            if webcam.get("setup"):
+                dialog.set_body(WEBCAM_SETUP.get(webcam["setup"], ""))
+            else:
+                dialog.set_body(_("Other apps can also use the camera as “Caelestia Phone Camera”."))
         dialog.add_response("start", _("Start camera") if camera else _("Start mirroring"))
         dialog.set_response_appearance("start", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response("start")

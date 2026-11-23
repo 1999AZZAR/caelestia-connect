@@ -1,7 +1,7 @@
 use crate::{state::State, wire};
 use anyhow::Result;
-use mdns_sd::{IfKind, Receiver, ServiceDaemon, ServiceEvent, ServiceInfo};
-use std::net::{Ipv4Addr, SocketAddrV4};
+use mdns_sd::{DaemonEvent, IfKind, Receiver, ServiceDaemon, ServiceEvent, ServiceInfo};
+use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
 
 const SERVICE: &str = "_kdeconnect._udp.local.";
 
@@ -9,6 +9,8 @@ pub struct Mdns {
     daemon: ServiceDaemon,
     name: String,
     events: Receiver<ServiceEvent>,
+    network: Receiver<DaemonEvent>,
+    bind: Ipv4Addr,
     loopback: bool,
 }
 
@@ -22,10 +24,13 @@ impl Mdns {
             daemon.enable_interface(IfKind::Addr(bind.into()))?;
         }
         let events = daemon.browse(SERVICE)?;
+        let network = daemon.monitor()?;
         let service = Self {
             daemon,
             name: format!("{}.{SERVICE}", state.config.id),
             events,
+            network,
+            bind,
             loopback: bind.is_loopback(),
         };
         service.advertise(state, bind)?;
@@ -105,6 +110,17 @@ impl Mdns {
                     )
                 })
                 .collect();
+        }
+        std::future::pending().await
+    }
+
+    pub async fn new_address(&self) {
+        while let Ok(event) = self.network.recv_async().await {
+            if let DaemonEvent::IpAdd(IpAddr::V4(address)) = event
+                && (address == self.bind || self.bind.is_unspecified() && !address.is_loopback())
+            {
+                return;
+            }
         }
         std::future::pending().await
     }
